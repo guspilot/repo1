@@ -1,0 +1,19 @@
+﻿Codigo,Nombre,TipoAveriaCodigo,DisposicionSugerida,Activo
+ST01,Golpe / abolladura,TP2,Venta con descuento (outlet / remate),Sí
+ST02,Rayón / raspón en acabado,TP2,Venta con descuento (outlet / remate),Sí
+ST03,Quebrado / roto (pantalla vidrio pieza),TP2,Destrucción,Sí
+ST04,Deformado / torcido (estructura),TP2,Reincorporación (reparación ST),Sí
+ST05,Empaque dañado con producto íntegro,TP1,Reincorporación (reparación ST),Sí
+ST06,Empaque abierto / sellos o etiquetas violadas,TP1,Reincorporación (reparación ST),Sí
+ST07,Golpe por montacargas / patín / equipo de carga,TP3,Venta con descuento (outlet / remate),Sí
+ST08,Caída en manipulación manual,TP3,Venta con descuento (outlet / remate),Sí
+ST09,Humedad / agua / líquidos,TP4,Destrucción,Sí
+ST10,Calor / fuego,TP4,Destrucción,Sí
+ST11,Plaga / contaminación,TP4,Destrucción,Sí
+ST12,No enciende / falla funcional (DOA),TP5,Devolución a proveedor local,Sí
+ST13,Falla intermitente / funcionamiento parcial,TP5,Reincorporación (reparación ST),Sí
+ST14,Faltan piezas (artículos ensamblados en tienda),TP6,Devolución a proveedor local,Sí
+ST15,Faltan accesorios (control cable cargador),TP6,Devolución a proveedor local,Sí
+ST16,Producto incompleto en bulto (faltan cajas del set),TP6,Devolución a proveedor local,Sí
+ST17,Manchado / sucio (muebles colchones textiles),TP6,Venta con descuento (outlet / remate),Sí
+ST99,Otro (describir),TP6,Por determinar,Sí

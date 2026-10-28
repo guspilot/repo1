@@ -1,0 +1,6 @@
+﻿Version,Matriz,Nivel,UnitarioDesdeUSD,UnitarioHastaUSD,RolAprobador,SLAAprobacionHoras,SLACierreDias,Fuente,VigenteDesde,VigenteHasta,Activo
+POL31-v2.0,Tienda,N1,0,100,Gerente de Tienda,48,10,POL-CO-0031 7.3.2,2026-07-01,,Sí
+POL31-v2.0,Tienda,N2,100.01,600,Operaciones local,48,15,POL-CO-0031 7.3.2,2026-07-01,,Sí
+POL31-v2.0,Tienda,N3,600.01,999999999,Control de Inventarios - Aprobador,48,20,POL-CO-0031 7.3.2,2026-07-01,,Sí
+POL31-v2.0,CD,N1,0,100,Gerente de Logística CD,48,10,POL-CO-0031 7.3.3,2026-07-01,,Sí
+POL31-v2.0,CD,N3,100.01,999999999,Control de Inventarios - Aprobador,48,20,POL-CO-0031 7.3.3,2026-07-01,,Sí

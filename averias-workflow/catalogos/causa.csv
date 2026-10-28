@@ -1,20 +1,20 @@
-﻿Codigo,Nombre,EtapaTipica,ResponsableDefault,AplicaReclamo,DisposicionSugerida,Activo,Orden
-CA01,Mal estibado / sobrepeso en contenedor de origen,Recepción proveedor,Proveedor,Sí,Reclamo a proveedor,Sí,10
-CA02,Empaque de origen insuficiente,Recepción proveedor,Proveedor,Sí,Reclamo a proveedor,Sí,20
-CA03,Defecto de fábrica,Recepción proveedor,Proveedor,Sí,Devolución a proveedor (RTV) / garantía,Sí,30
-CA04,Daño en transporte internacional / naviera / agente,Recepción proveedor,Transportista,Sí,Reclamo a transportista,Sí,40
-CA05,Manipulación en descarga (CD),Recepción proveedor,Operación CD,No,Venta outlet,Sí,50
-CA06,Montacargas / equipo de manejo (CD),Almacenamiento CD,Operación CD,No,Venta outlet,Sí,60
-CA07,Sobre-estiba / altura de apilamiento excedida,Almacenamiento CD,Operación CD,No,Venta outlet,Sí,70
-CA08,Infraestructura (goteras / rack / piso),Almacenamiento CD,Operación CD,No,Por determinar,Sí,80
-CA09,Picking / manipulación en preparación,Picking / despacho CD,Operación CD,No,Venta outlet,Sí,90
-CA10,Mala carga / estiba en camión de despacho,Picking / despacho CD,Operación CD,No,Venta outlet,Sí,100
-CA11,Daño en ruta CD→tienda (flota o transportista),Transporte CD→tienda,Transportista,Sí,Reclamo a transportista,Sí,110
-CA12,Manipulación en descarga / bodega de tienda,Recepción tienda,Tienda,No,Venta outlet,Sí,120
-CA13,Exhibición en piso de venta,Exhibición / bodega tienda,Tienda,No,Venta outlet,Sí,130
-CA14,Manipulación de cliente en tienda,Exhibición / bodega tienda,Tienda,No,Venta outlet,Sí,140
-CA15,Entrega última milla / instalación,Entrega a cliente (last-mile),Transportista,Sí,Reclamo a transportista,Sí,150
-CA16,Devolución de cliente con daño,Devolución de cliente,Cliente,No,Por determinar,Sí,160
-CA17,Siniestro (lluvia inundación incendio sismo),Cualquiera,Aseguradora,Sí,Reclamo a aseguradora,Sí,170
-CA98,Origen no identificado (detectado en inventario),Cualquiera,Por determinar,No,Por determinar,Sí,980
-CA99,Por determinar (requiere investigación),Cualquiera,Por determinar,No,Por determinar,Sí,990
+﻿Codigo,Nombre,Origenes,EtapaTipica,RecuperacionSugerida,Activo
+CA01,Mal estibado / sobrepeso en contenedor de origen,Proveedor local;Proveedor importado,Recepción de proveedor,Nota de crédito / compensación del proveedor,Sí
+CA02,Empaque de origen insuficiente,Proveedor local;Proveedor importado,Recepción de proveedor,Nota de crédito / compensación del proveedor,Sí
+CA03,Defecto de fábrica,Proveedor local;Proveedor importado,Cualquiera,Nota de crédito / compensación del proveedor,Sí
+CA04,Daño en transporte internacional / naviera / agente,Proveedor importado,Recepción de proveedor,Nota de crédito / compensación del proveedor,Sí
+CA05,Manipulación en descarga,Centro de Distribución;Bodega externa;3PL / operador logístico;Tienda,Recepción de proveedor,Ninguna,Sí
+CA06,Montacargas / equipo de manejo,Centro de Distribución;Bodega externa;3PL / operador logístico,Almacenamiento,Ninguna,Sí
+CA07,Sobre-estiba / altura de apilamiento excedida,Centro de Distribución;Bodega externa;3PL / operador logístico,Almacenamiento,Ninguna,Sí
+CA08,Infraestructura (goteras / rack / piso),Centro de Distribución;Bodega externa;3PL / operador logístico;Tienda,Almacenamiento,Reclamo a aseguradora,Sí
+CA09,Picking / manipulación en preparación,Centro de Distribución;Bodega externa;3PL / operador logístico,Picking / despacho,Ninguna,Sí
+CA10,Mala carga / estiba en camión,Centro de Distribución;Transporte propio;Transporte tercerizado,Picking / despacho,Ninguna,Sí
+CA11,Daño en ruta (golpe vibración accidente),Transporte propio;Transporte tercerizado,Descarga en tienda,Cobro a transportista / OPL (retail),Sí
+CA12,Apertura no autorizada / violación de carga,Transporte propio;Transporte tercerizado,Descarga en tienda,Cobro a transportista / OPL (retail),Sí
+CA13,Manipulación en descarga / bodega de tienda,Tienda,Descarga en tienda,Ninguna,Sí
+CA14,Exhibición en piso de venta,Tienda,Exhibición / bodega de tienda,Ninguna,Sí
+CA15,Manipulación de cliente en tienda,Tienda,Exhibición / bodega de tienda,Ninguna,Sí
+CA16,Entrega a domicilio / instalación,Entrega al cliente final,Entrega a cliente,Cobro a transportista / OPL (retail),Sí
+CA17,Devolución de cliente con daño,Entrega al cliente final,Devolución de cliente,Ninguna,Sí
+CA18,Siniestro (lluvia inundación incendio sismo),Centro de Distribución;Bodega externa;3PL / operador logístico;Tienda;Transporte propio;Transporte tercerizado,Cualquiera,Reclamo a aseguradora,Sí
+CA99,Origen no identificado (detectado en inventario o auditoría),Centro de Distribución;Bodega externa;3PL / operador logístico;Tienda,Cualquiera,Ninguna,Sí

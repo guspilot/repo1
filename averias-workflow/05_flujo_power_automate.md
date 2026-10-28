@@ -1,221 +1,239 @@
 # 05 — Especificación de los flujos de Power Automate
 
+Alineado con **POL-CO-0031 v2.0**, con el esquema [`01`](01_esquema_lista.md) y con las reglas [`03`](03_reglas_aprobacion.md).
+
 ## Diseño general
 
-Son cuatro flujos de nube, todos con **conectores estándar**: SharePoint, Approvals, Microsoft Teams y Office 365 Outlook (solo de respaldo). No se usan conectores premium, Dataverse, conectores personalizados, registros de aplicación ni cuentas de servicio, así que no hace falta TI.
+Son cinco flujos de nube. Todos usan **conectores estándar** (SharePoint, Approvals y Microsoft Teams), así que no requieren premium, Dataverse, conectores personalizados ni cuentas de servicio: **no hace falta TI**.
 
 | Flujo | Disparador | Qué hace |
 |---|---|---|
-| **AV-01 Envío y N1** | La lista `Averías` pasa a `Estado = Enviado` | Asigna el folio, fija `FechaEnvio`, resuelve el jefe de la ubicación, pide la aprobación N1 y la pasa a valorización |
-| **AV-02 Valorización y N2–N4** | La lista pasa a `Estado = Valorizado` | Convierte a USD, aplica el anti-fraccionamiento, calcula el tramo, corre N2–N4 y avisa a Control de Inventarios para el ajuste en Infor |
-| **AV-03 Cierre** | `Estado = Pendiente ajuste Infor` con `NumeroAjusteInfor` y `EvidenciaDisposicion` cargados | Cierra el caso y calcula `CerradoATiempo` |
-| **AV-04 Seguimiento diario** | Programado, de lunes a sábado a las 07:00 (UTC-6) | Envía por Teams resúmenes de valorizaciones y ajustes de Infor vencidos |
+| **AV-01 Envío** | `Estado = Enviado` | Asigna el folio, mide el tiempo de reporte y le pide a CI la valorización |
+| **AV-02 Nivel y aprobación** | `Estado = Valorizado` | Convierte a USD, totaliza las líneas, aplica la recurrencia y la matriz, y corre la aprobación del nivel que corresponde |
+| **AV-03 Disposición** | `Estado = Disposición propuesta` | Valida los requisitos, pide la autorización según la disposición y avisa a ST, Compras o Finanzas |
+| **AV-04 Cierre** | `Estado = Pendiente ejecución`, con el N.º Infor y la evidencia cargados | Cierra el caso y calcula el E2E y el cumplimiento del SLA |
+| **AV-05 Seguimiento diario** | Programado: lunes a sábado, 07:00 (UTC-6) | Envía resúmenes de los casos vencidos por paso y por país |
 
-**Por qué hay flujos separados y no uno largo:** la valorización y el ajuste en Infor son trabajo humano que se hace en Power Apps y puede tardar días. Un flujo que espera un cambio en un ítem tendría que consultar la lista en un bucle, lo que gasta acciones y es frágil. Con un disparador por estado, cada flujo es corto y fácil de depurar, y si alguien corrige un ítem a mano en SharePoint, el proceso retoma solo.
+**Por qué hay un flujo por estado:** cada paso humano (valorizar, diagnosticar, proponer la disposición, ejecutar en Infor) se hace en Power Apps y puede tardar días. Un flujo largo que esperara cada cambio tendría que consultar la lista en un bucle, y eso es frágil. Con un flujo por estado, si alguien corrige un ítem el proceso retoma solo.
 
-**Power Apps no llama a los flujos directamente.** La app solo escribe `Estado` y los flujos se disparan desde SharePoint. Así se evitan los problemas de conexiones del disparador de Power Apps y el proceso funciona aunque alguien edite desde la lista.
+**Power Apps no llama a los flujos.** La app solo escribe `Estado` y los flujos se disparan desde SharePoint.
 
-### Configuración común a los cuatro flujos
+### Cumplimiento de 8.2.4–8.2.5 (todo dentro del workflow)
 
-- **Propiedad:** el dueño es la cuenta de Logística regional y hay al menos un **copropietario** (Compartir → agregar propietario). Si el único dueño se va de la empresa, los flujos se detienen.
-- **Condiciones del disparador** (Configuración del disparador → Condiciones del desencadenador): cada flujo arranca solo en su estado. Esto evita bucles cuando el mismo flujo actualiza el ítem.
-- **Control de simultaneidad del disparador:** activado, con grado 10. Evita picos de acciones a la misma hora.
-- **Protección contra doble disparo:** la primera acción vuelve a leer el ítem con *Obtener elemento* y una condición termina el flujo si `Estado` ya no es el esperado. Una edición rápida puede generar dos eventos de modificado.
-- **Manejo de errores:** el cuerpo va en un ámbito `Try`. Un ámbito `Catch` con *Configurar ejecución después de* = "ha fallado" o "ha agotado el tiempo de espera" publica en Teams, al grupo Admin, el folio y el enlace a la ejecución:
+- Las **decisiones** se toman solo en Approvals (que guarda la respuesta en el flujo) o en las pantallas de Power Apps. Teams y el correo solo **notifican** y llevan el enlace al ticket.
+- Cada respuesta, comentario y acción se escribe en `Comentarios` (con anexar cambios) y en `Averias_Historial`.
+- **Cada notificación de Teams termina con:** "Las decisiones sobre esta avería se toman solo en el ticket. No respondas por este chat."
+
+### Configuración común a los cinco flujos
+
+- **Dueño:** la cuenta de Logística regional, con al menos un **copropietario**.
+- **Condiciones del disparador:** cada flujo arranca solo en su estado, para evitar bucles.
+- **Simultaneidad del disparador:** activada, con grado 10.
+- **Doble disparo:** la primera acción es *Obtener elemento*; si el `Estado` ya no es el esperado, el flujo hace *Terminar*.
+- **Errores:** el cuerpo va en un ámbito `Try`. Un ámbito `Catch` (configurado para ejecutarse si `Try` falló o se agotó el tiempo) publica en Teams al grupo Admin el folio y este enlace a la ejecución:
   ```
   concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])
   ```
-- **Lectura de parámetros:** cada flujo empieza con *Obtener elementos* de `Cfg_Parametros` y una acción *Seleccionar* que arma el objeto `{Clave: Valor}`. Después se lee, por ejemplo, `int(body('Param')?['HorasRecordatorio'])`. Las expresiones de abajo usan `param('X')` como abreviatura de eso.
-- **Zona horaria:** SharePoint guarda las fechas en UTC. Para el folio y el período de tipo de cambio se usa `convertFromUtc(utcNow(), 'Central America Standard Time', 'yyyy-MM')`.
-- **Enlaces:** cada notificación lleva el enlace al ítem y un enlace directo a la app: `https://apps.powerapps.com/play/<AppId>?id=<ID>`. La app lo lee con `Param("id")` en `StartScreen`.
+- **Parámetros:** *Obtener elementos* de `Cfg_Parametros` y *Seleccionar* para armar el objeto. En este documento, `param('X')` es esa lectura.
+- **Resolución de aprobadores (`ResolverRol(rol, ubicación)`):** en `Cfg_Aprobadores` con `Rol = rol` y `Activo = 1`, se busca en este orden:
+  1. País + ubicación exacta.
+  2. País + `*`.
+  3. `*` + `*`.
 
-### Límites de solicitudes: hay que dimensionarlos
+  Se devuelven el aprobador y el suplente.
+- **Segregación (`AplicarSegregacion(aprobador, excluidos)`):** si el aprobador está en la lista de excluidos, se usa el suplente. Si el suplente también está, se avisa al Gerente de Logística del país y se usa el suplente de `Control de Inventarios - Aprobador`.
+- **Esperar con recordatorio y escalamiento (`EsperarConEscalamiento`):**
+  1. *Crear una aprobación* y *Esperar una aprobación* con un tiempo de espera de `PT{HorasRecordatorio}H`.
+  2. Si se agota: recordatorio por Teams, registro en el historial y segunda espera hasta `HorasEscalamientoSuplente`.
+  3. Si se agota otra vez: se crea la aprobación al suplente con el título `[ESCALADA]`, se avisa al aprobador original que su respuesta ya no cuenta, se registra en el historial y se espera hasta `P20D`.
+  4. Después de **cada** espera que termine bien, *Establecer variable* `varResp`.
 
-Los flujos corren con las licencias del dueño. Con licencia Microsoft 365, el límite de Power Platform es del orden de **6 000 solicitudes cada 24 h por usuario**; conviene verificar el valor vigente en la documentación de Microsoft, porque cambia. Una avería completa consume ≈ 35–60 acciones entre los 4 flujos.
+  No se usa `coalesce(body(...))` porque referenciar una acción omitida hace fallar el flujo.
+- **Rechazo o devolución sin comentario:** no se acepta. Se vuelve a crear la aprobación con el aviso "Rechazar o devolver requiere comentario", porque Approvals no permite exigir el comentario.
+- **Zona horaria:** las fechas se guardan en UTC. Para el folio y el período de tipo de cambio se usa `convertFromUtc(utcNow(), 'Central America Standard Time', ...)`.
+- **Enlace a la app:** `https://apps.powerapps.com/play/<AppId>?id=<ID>`.
 
-| Volumen | Averías por día | Acciones por día (≈ 50/caso) | Situación |
+### Límites de solicitudes
+
+Con licencia M365, el límite es del orden de **6 000 solicitudes cada 24 h por usuario dueño**; verificá el valor vigente. Un caso completo usa ~60–90 acciones entre los cinco flujos, contando la recurrencia por línea.
+
+| Volumen del país | Casos/día | Acciones/día | ¿Entra con un solo dueño? |
 |---|---|---|---|
-| Bajo (1 440/mes) | ~48 | ~2 400 | Holgado |
-| Alto (2 760/mes) | ~92 | ~4 600 | Cerca del límite en días pico |
+| Base (≈ 258 casos/mes) | ~12 | ~900 | Sí |
+| Alto (≈ 505 casos/mes) | ~23 | ~1 800 | Sí |
+| **6 países, volumen alto** | ~140 | ~10 800 | **No** |
 
-**Mitigación sin TI:** si el volumen real es alto, que cada flujo tenga un dueño distinto. Por ejemplo, AV-02, que es el más pesado, a nombre de otra persona de Logística regional. El límite es por usuario, así que eso lo multiplica. El indicador para vigilarlo está en Power Platform admin center → Análisis, si es accesible; si no, en el historial de ejecuciones, buscando estados "Limitado".
+**A escala regional hace falta repartir.** Recomiendo que AV-02 (el más pesado) quede a nombre de un dueño distinto de los demás flujos, o duplicar AV-02 por grupo de países con dueños distintos. El límite es por usuario.
 
 ---
 
-## AV-01 — Envío y aprobación N1
+## AV-01 — Envío
 
-**Disparador:** SharePoint → *Cuando se crea o modifica un elemento* (sitio de Averías, lista `Averías`).
+**Disparador:** *Cuando se crea o modifica un elemento* en `Averias`.
 
-**Condición del disparador:**
+**Condición del disparador:** `@equals(triggerOutputs()?['body/Estado/Value'], 'Enviado')`
+
+| # | Acción | Detalle |
+|---|---|---|
+| 1 | Obtener elemento y verificar el estado | |
+| 2 | Obtener elementos de `Averias_Lineas` con `AveriaID eq {ID}` | Si no hay ninguna línea: `Estado = Borrador`, aviso por Teams al reportante y *Terminar*. |
+| 3 | Componer el folio | Si `Title = 'PENDIENTE'`: `concat('AV-', PaisCodigo, '-', yyyy, '-', formatNumber(ID,'000000'))`. Si no, se conserva (es un reenvío). |
+| 4 | Componer `FechaEnvio` | `if(empty(FechaEnvio), utcNow(), FechaEnvio)`. En un reenvío se conserva la fecha original. |
+| 5 | Componer las horas de reporte | `div(sub(ticks(FechaEnvio), ticks(FechaHoraDeteccion)), 36000000000.0)`. `ReporteTardio = greater(horas, float(param('MaxHorasDeteccionAReporte')))`. |
+| 6 | Actualizar elemento | `Title`, `FechaEnvio`, `HorasDeteccionAReporte`, `ReporteTardio` y `Estado = Pendiente valorización`. En `Comentarios` se anexa "Reportado por {ReportanteEmail}". |
+| 7 | *Aplicar a cada uno* sobre las líneas → Actualizar elemento | En cada línea: `Title = folio`, `FechaEnvio` y `EstadoCaso = Pendiente valorización`. |
+| 8 | Historial | `Accion = Enviado`. |
+| 9 | `ResolverRol('Control de Inventarios - Valorizador', ubicación)` | |
+| 10 | Teams al valorizador | "Valorizar {Folio}: {n} líneas en {UbicacionCodigo}. SLA {SLAValorizacionHoras} h", con el enlace a la pantalla **Valorizar**. Si `ReporteTardio`, se agrega "⚠ Reportado {h} h después de la detección (política: 24 h)". |
+
+**Pantalla Valorizar (Power Apps, para CI):** por cada línea se cargan proveedor, costo unitario y precio retail desde Infor, y se verifica `SinSerie`. En el encabezado CI puede corregir el `Origen` (proveedor local o importado) y la `CausaCodigo`. Al guardar: `Estado = Valorizado` y `ValorizadorEmail = User().Email`. La app no deja guardar si falta algún costo o algún retail.
+
+---
+
+## AV-02 — Nivel y aprobación de la avería
+
+**Disparador:** *Cuando se crea o modifica un elemento* en `Averias`, con la condición `@equals(triggerOutputs()?['body/Estado/Value'], 'Valorizado')`.
+
+### A. Valorización en USD
+
+| # | Acción | Detalle |
+|---|---|---|
+| 1 | Obtener elemento y verificar el estado; leer los parámetros | |
+| 2 | Tipo de cambio | De `Cfg_TipoCambio` para el mes actual y la `Moneda`. Si falta, se usa el del mes anterior y se avisa al Admin. Si tampoco está, aviso y *Terminar*: el caso queda en `Valorizado` y se reprocesa cuando se cargue el TC. |
+| 3 | Obtener las líneas | |
+| 4 | *Aplicar a cada uno* línea → Actualizar elemento de la línea | `CostoUnitarioUSD = div(CostoUnitarioLocal, TC)`, `CostoLineaUSD = mul(Cantidad, CostoUnitarioUSD)`, `RetailLineaUSD = div(mul(Cantidad, PrecioRetailUnitarioLocal), TC)`, `OrigenImputable = Origen` del encabezado, y `EstadoCaso = Valorizado`. Todo redondeado a 2 decimales. Las variables `varCosto`, `varRetail` (Float, se incrementan) y `varUnitMax` (`max()`) se van actualizando. |
+| 5 | Componer `MontoFacturable` | Si `Origen` está en {Transporte tercerizado, Bodega externa, 3PL / operador logístico}: `varRetail` [5.2.1.4]. En otro caso: 0. Para los proveedores lo carga Compras. |
+
+### B. Recurrencia (D2, V3)
+
+Se cuentan casos distintos del mismo país, sin incluir `EstadoCaso` en {Rechazado, Anulado, Borrador}.
+
+| # | Regla | Acciones |
+|---|---|---|
+| 6 | **R1, SKU** (por cada línea, solo si `Origen` es Proveedor local o importado) | *Obtener elementos* de `Averias_Lineas` con `PaisCodigo eq '{p}' and SKU eq '{sku}' and FechaEnvio ge '{hoy − RecHistoriaDias}'`. Con *Filtrar matriz*: `OrigenImputable` de proveedor y estado válido. Se separan dos grupos: **ventana** (últimos `RecSKU_VentanaDias`) e **historia** (de −240 a −60 días). `nVentana` = cantidad de `AveriaID` distintos en la ventana: `length(union(...))` sobre un *Seleccionar* de `AveriaID`. `λ = nHistoria / 180 × 60`. `k` = `K_alfa_2_5` de la primera fila de `Cfg_TablaPoisson` con `LambdaHasta ≥ λ`. **R1 se cumple si `nVentana ≥ max(RecSKU_Piso, k)`.** |
+| 7 | **R2, proveedor** (por cada proveedor distinto de las líneas, con la misma condición de origen) | Igual que R1, filtrando por `Proveedor eq '{prov}'` y con `RecProv_Piso` y `RecProv_VentanaDias`. |
+| 8 | **R3a y R3b, tienda** (solo para la matriz Tienda; en última milla se usa la tienda vendedora) | *Obtener elementos* de `Averias` con `UbicacionCodigo eq '{u}' and FechaEnvio ge '{hoy − RecTienda_VentanaDias}'`, filtrando los estados válidos. `n` = conteo, incluido el caso actual. `usd` = suma de `CostoTotalUSD` (con *Aplicar a cada uno* e *Incrementar variable*) + `varCosto`. Con `FactorTamano` y `KRecurrenciaTienda` de `Cat_Ubicacion`: **R3a = `n ≥ KRecurrenciaTienda`**; **R3b = `n ≥ RecTienda_MinCasosMonto` y `usd ≥ RecTienda_MontoUSD × max(1, FactorTamano)`**. |
+| 9 | Componer `Recurrente` | `or(R1, R2, R3a, R3b)` y los motivos. Si `param('RecurrenciaModo') = 'Observar'`: `RecurrenciaObservada = Recurrente` y, **para el nivel**, `Recurrente = false`. |
+
+### C. Nivel y aprobador
+
+| # | Acción | Detalle |
+|---|---|---|
+| 10 | Obtener `Cfg_Matriz` con `Activo eq 1`, filtrado por `Matriz = MatrizAplicable` y vigencia | |
+| 11 | Componer `NivelUnit` | La fila con `UnitarioDesdeUSD ≤ varUnitMax ≤ UnitarioHastaUSD`. |
+| 12 | Componer el nivel final | Si `Recurrente` o `varCosto > CasoMaxSinNivel3USD`, va a la fila **N3** de la matriz. Si no, se queda en `NivelUnit`. Se arma `MotivoNivel`: Costo unitario, Caso > 3 000 y/o los motivos de recurrencia. |
+| 13 | Aprobador | `ResolverRol(fila.RolAprobador, ubicación o tienda vendedora)`, luego `AplicarSegregacion` excluyendo a `ReportanteEmail` y, si el nivel es N3, también a `ValorizadorEmail`. |
+| 14 | Actualizar elemento | `TipoCambioAplicado`, `CostoTotalUSD = varCosto`, `CostoUnitarioMaxUSD = varUnitMax`, `RetailTotalUSD = varRetail`, `MontoFacturableUSD`, `FechaValorizacion`, `NivelAprobacion`, `MotivoNivel`, `RecurrenciaObservada`, `RolAprobador`, `VersionMatriz`, `RequiereDiagnosticoST`, `FechaLimiteCierre = addDays(FechaHoraDeteccion, fila.SLACierreDias)` y `Estado = Pendiente aprobación`. `RequiereDiagnosticoST` = TP5, o tipo con `RequiereDiagnosticoST = Sí`, o disposición = Reincorporación. |
+| 15 | Historial | `Accion = Valorizado`, `Actor = valorizador`, duración desde `FechaEnvio` y `SLAHoras = SLAValorizacionHoras`. |
+| 16 | D6 | Si `MatrizAplicable = CD` y `varCosto > NotificarRegionalCasoUSD`: Teams **informativo** al Gerente de Logística regional. |
+
+### D. Aprobación
+
+| # | Acción | Detalle |
+|---|---|---|
+| 17 | `EsperarConEscalamiento` | Respuestas personalizadas: `Aprobar`, `Rechazar`, `Devolver para corrección`. Título: `Avería {Folio} · {Nivel} · USD {CostoTotalUSD} · {UbicacionCodigo}`. Los detalles incluyen tipo, origen, causa, resumen, líneas (SKU × cantidad × costo unitario USD), cantidad de fotos, horas de reporte y `MotivoNivel`. Si hay recurrencia, se destaca en negrita, por ejemplo "⚠ Recurrencia de tienda: {n} casos / USD {usd} en 30 días". |
+| 18 | **Switch** según la respuesta | |
+| 18a | `Aprobar` | Actualizar elemento: `Aprobador`, `FechaAprobacion`, se anexa a `Comentarios`, y `Estado` = `Pendiente diagnóstico ST` si `RequiereDiagnosticoST`, o `Pendiente disposición` si no. En las líneas, `EstadoCaso = Aprobado`. Historial con la duración y `SLAHoras = 48`. Si va a ST: Teams a `Servicio Técnico (ST)` con el folio, las líneas y el enlace a la pantalla **Diagnóstico**. Si no: Teams al Gerente de Tienda o de Logística del CD con el enlace a la pantalla **Disposición**. |
+| 18b | `Rechazar` | `Estado = Rechazado` y `MotivoRechazo`. En las líneas, `EstadoCaso = Rechazado`. Teams al reportante. |
+| 18c | `Devolver` | `Estado = Devuelto para corrección` y `MotivoRechazo`. Teams al reportante. Al reenviar, el caso vuelve a valorizarse, porque las líneas pueden haber cambiado. |
+
+> **Validación previa en la app:** la pantalla de aprobación no muestra el botón Aprobar si `Consolidado = No` [3, 5.4.5]. Si se aprueba desde Teams u Outlook, el flujo lo vuelve a validar en 18a: si `Consolidado = No`, cambia el resultado a `Devolver` con el motivo "Consolidar el producto antes de aprobar".
+
+**Pantalla Diagnóstico (ST o Logística):** se cargan `DiagnosticoST` y `NumeroInformeST`. Al guardar, `Estado = Pendiente disposición`. Si el diagnóstico es `No reparable`, la app quita Reincorporación de las opciones.
+
+**Pantalla Disposición (Gerente de Tienda o de Logística del CD):** confirma o cambia `DisposicionPropuesta` y `Recuperacion` y pasa el caso a `Estado = Disposición propuesta`.
+
+---
+
+## AV-03 — Autorización de la disposición
+
+**Disparador:** `@equals(triggerOutputs()?['body/Estado/Value'], 'Disposición propuesta')`
+
+| # | Acción | Detalle |
+|---|---|---|
+| 1 | Obtener elemento y verificar el estado | |
+| 2 | Validar los requisitos | **Reincorporación** requiere `DiagnosticoST` en {Reparable, Sin falla}. **Devolución a proveedor local o internacional** requiere `Origen` = Proveedor local o importado según corresponda [7.7.1]. **Destrucción o donación** requiere `DiagnosticoST ≠ Reparable` si hubo diagnóstico. Si algo falla: `Estado = Pendiente disposición`, se anexa el motivo a `Comentarios`, Teams al gerente y *Terminar*. |
+| 3 | Actualizar elemento | `Estado = Pendiente autorización disposición`. |
+| 4 | **Switch** según `DisposicionPropuesta` | |
+| 4a | Reincorporación | No hay autorización adicional [7.5]: se pasa directo a `Estado = Pendiente ejecución`. Teams a Logística para el traslado a ST con el comprobante de movimiento [7.5.2]. |
+| 4b | Venta con descuento | Teams al **Gerente de Producto** (`ResolverRol('Gerente de Producto', país)`) con el enlace a la pantalla **Autorizar descuento**, donde carga `DescuentoAutorizadoPct` y elige Autorizar o Rechazar. *Hacer hasta* que el estado cambie (consulta cada 4 h, tiempo de espera `PT{SLAAutorizacionDescuentoHoras}H`). Si vence: recordatorio y escalamiento al suplente. **Es el único paso con espera por consulta:** Approvals no captura números y el % es obligatorio. |
+| 4c | Devolución a proveedor local o internacional | `EsperarConEscalamiento` a **Compras** con las opciones `Procede` / `No procede`. Si es internacional, Teams **informativo** a Finanzas y Seguros por la provisión [7.7.3.1]. |
+| 4d | Destrucción o donación | `EsperarConEscalamiento` a **`Control de Inventarios - Aprobador`** con las opciones `Validar` / `No validar` [7.8.1]. En los detalles: "Se requerirá acta formal, fotos y contrato si es donación [7.8.2]". |
+| 5 | Resultado | **Autorizado:** `Estado = Pendiente ejecución`, `AutorizadorDisposicion`, `FechaAutorizacionDisposicion` e historial. **Rechazado:** `Estado = Pendiente disposición`, motivo anexado y Teams al gerente. |
+| 6 | Recuperación (paralela, no bloquea) | Si `Recuperacion` incluye "Cobro a transportista / OPL" o "Reclamo a aseguradora": Teams a **Finanzas y Seguros** con `MontoFacturableUSD` (a retail) [5.2.1.4, 3-#7]. Si incluye "Nota de crédito / compensación del proveedor": Teams a **Compras**. |
+| 7 | Aviso de ejecución | Teams a CI: "Ejecutar en Infor {Folio}: {disposición}. Motivo de movimiento sugerido: {tabla}. SLA {SLAEjecucionDias} días. Cargá el N.º de movimiento y la evidencia en la pantalla **Cerrar**". |
+
+| Disposición | Movimiento Infor | Evidencia |
+|---|---|---|
+| Reincorporación | Traslado a la bodega de ST; reincorporación al activo después de la prueba | Comprobante digital de movimiento [7.5.2] |
+| Venta con descuento | Traslado a la ubicación de outlet o remate | N.º de traslado |
+| Devolución a proveedor local o internacional | Salida por RTV, o ajuste contra la provisión | Guía de RTV, o NC o compensación |
+| Destrucción o donación | Ajuste por baja | **Acta** formal (y contrato si es donación) |
+
+> Los **códigos de motivo de movimiento de Infor** de cada disposición los tiene que definir Control de Inventarios de cada país. Sin eso, la conciliación entre Infor y el workflow no va a cuadrar.
+
+---
+
+## AV-04 — Cierre
+
+**Disparador** (en una sola línea):
 ```
-@equals(triggerOutputs()?['body/Estado/Value'], 'Enviado')
+@and(equals(triggerOutputs()?['body/Estado/Value'],'Pendiente ejecución'), not(empty(triggerOutputs()?['body/NumeroAjusteInfor'])), not(empty(triggerOutputs()?['body/EvidenciaDisposicion'])))
 ```
 
 | # | Acción | Detalle |
 |---|---|---|
-| 1 | Obtener elemento | Por ID del disparador. **Condición:** si `Estado ≠ Enviado`, *Terminar* (correcto). |
-| 2 | Obtener elementos `Cfg_Parametros` + Seleccionar | Arma el objeto de parámetros. |
-| 3 | Componer `Folio` | Si `Title = 'PENDIENTE'`: `concat('AV-', PaisCodigo, '-', convertFromUtc(utcNow(),'Central America Standard Time','yyyy'), '-', formatNumber(ID,'000000'))`; si no, conservar `Title` (es un reenvío). |
-| 4 | Componer `FechaEnvio` | `if(empty(FechaEnvio), utcNow(), FechaEnvio)`. **En un reenvío tras devolución se conserva la fecha original**: el SLA corre desde la primera vez. Si no fuera así, devolver un caso reiniciaría el reloj. |
-| 5 | Componer `ReporteTardio` | `greater(div(sub(ticks(FechaEnvio), ticks(FechaDeteccion)), 864000000000), int(param('MaxDiasDeteccionAReporte')))` |
-| 6 | Obtener elementos `Cfg_Aprobadores` | Consulta de filtro: `PaisCodigo eq '{PaisCodigo}' and Rol eq 'Jefe de ubicación' and Activo eq 1`. |
-| 7 | Filtrar matriz ×2 + Componer `Jefe` | Primero `UbicacionCodigo = {UbicacionCodigo}`; si queda vacío, `UbicacionCodigo = '*'`. Toma `first()`. **Si los dos quedan vacíos:** Teams al Admin con "Sin jefe configurado para {ubicación}", deja `Estado = Enviado` y termina (falló). |
-| 8 | Segregación | Si `toLower(Jefe.Aprobador.Email) = toLower(ReportanteEmail)`, usa `Jefe.Suplente`. Si el suplente también es el reportante, avisa al Admin y termina. |
-| 9 | Actualizar elemento | `Title = Folio`, `FechaEnvio`, `ReporteTardio`, `Estado = Pendiente N1`, `NivelActual = 1`, `JefeUbicacion = aprobador resuelto`. |
-| 10 | Crear elemento `Averias_Historial` | `Accion = Enviado`, `Nivel = 0`, `Actor = Author`, `FechaInicio = FechaFin = utcNow()`. |
-| 11 | Approvals → **Crear una aprobación** | Tipo: **Respuestas personalizadas: esperar una respuesta**. Opciones: `Aprobar`, `Rechazar`, `Devolver para corrección`. Título: `Avería {Folio} · {UbicacionCodigo} · {TipoAveria}`. Asignado a: el jefe resuelto. Detalles (Markdown): SKU, descripción, cantidad, etapa, causa, responsable imputable, descripción del daño, cantidad de fotos, fecha de detección y la advertencia de reporte tardío si aplica. Enlace del elemento: el enlace de la app. **Sin costo**: todavía no está valorizado. |
-| 12 | Approvals → **Esperar una aprobación** (ID del paso 11) | **Configuración → Tiempo de espera:** `PT{HorasRecordatorio}H` (`PT24H`). |
-| 13 | *Si 12 agotó el tiempo* (ejecutar después de "ha agotado el tiempo de espera") | Teams → *Publicar mensaje en un chat o canal* (como Flow bot, chat con el aprobador): "Tenés pendiente la avería {Folio} desde hace 24 h". Historial: `Accion = Recordatorio`. Luego **Esperar una aprobación** del mismo ID con tiempo de espera `PT{HorasEscalamientoSuplente − HorasRecordatorio}H` (`PT24H`). |
-| 14 | *Si el segundo wait agotó el tiempo* | **Crear una aprobación** igual a la del paso 11, asignada al **suplente**, con el título prefijado `[ESCALADA]`. Avisa al aprobador original por Teams que el caso se reasignó y que su respuesta ya no cuenta. Historial: `Accion = Escalado a suplente`. **Esperar una aprobación** con tiempo de espera `P20D`. Si también vence: Teams al Gerente de logística país y al Admin, y termina. |
-| 15 | Variable `varResp` (Object) | Inicializada vacía al principio del flujo. **Después de cada uno de los tres waits** que termine bien, *Establecer variable* `varResp = body('<ese wait>')`. No se usa `coalesce(body(...))` sobre los tres waits porque una expresión que referencia una acción omitida falla. De `varResp` salen `Resultado = outcome`, `Respondio = responses[0].responder.email` y `Comentario = responses[0].comments`. |
-| 16 | **Switch** sobre `Resultado` | Ver abajo. |
-
-**Rama `Aprobar`:**
-1. Resuelve `Control de inventarios` con el mismo patrón de los pasos 6–7 (rol, país, `*`).
-2. Actualizar elemento: `AprobadorN1 = Respondio`, `FechaN1 = utcNow()`, `Estado = Pendiente valorización`, `NivelActual = 0`, `ControlInventarios = resuelto`, `ComentarioAprobacion = 'N1: ' + Comentario`.
-3. Historial: `Accion = Aprobado`, `Nivel = 1`, `FechaInicio = FechaEnvio` (o la fecha de reenvío), `FechaFin = utcNow()`, `DuracionHoras = div(sub(ticks(utcNow()), ticks(FechaInicio)), 36000000000.0)`.
-4. Teams a Control de Inventarios: "Valorizar {Folio}: SKU {SKU} × {Cantidad} en {UbicacionCodigo} ({CodigoInfor}). SLA {SLAValorizacionHoras} h." más el enlace a la pantalla de valorización.
-
-**Rama `Rechazar`:**
-1. Actualizar elemento: `Estado = Rechazado`, `AprobadorN1`, `FechaN1`, `FechaAprobacionFinal = utcNow()`, `MotivoRechazo = Comentario`.
-2. Historial: `Accion = Rechazado`, `Nivel = 1`.
-3. Teams al reportante con el motivo.
-4. **Si `Comentario` está vacío**, el flujo no rechaza: crea otra vez la aprobación con el texto "El rechazo requiere comentario". Las aprobaciones no permiten exigir el comentario, así que la regla se aplica acá.
-
-**Rama `Devolver para corrección`:**
-1. Actualizar elemento: `Estado = Devuelto para corrección`, `MotivoRechazo = Comentario`. `FechaEnvio` no se toca.
-2. Historial: `Accion = Devuelto`, `Nivel = 1`.
-3. Teams al reportante: "Corregí la avería {Folio}: {Comentario}", con el enlace a la app. Cuando el reportante reenvía, la app pone `Estado = Enviado` y AV-01 corre de nuevo; el folio y la `FechaEnvio` se conservan por los pasos 3 y 4.
+| 1 | Obtener elemento y verificar el estado | |
+| 2 | Validaciones | Si la disposición es destrucción o donación y no hay fotos adjuntas posteriores a `FechaAutorizacionDisposicion` (se verifica con *Obtener datos adjuntos*), se avisa a CI y no se cierra [7.8.2]. Si `NumeroAjusteInfor` ya existe en otro caso, solo se avisa, porque un mismo movimiento puede cubrir varios casos. |
+| 3 | Actualizar elemento | `Estado = Cerrado`, `FechaCierre = utcNow()`, `DiasResolucionE2E = div(sub(ticks(utcNow()), ticks(FechaHoraDeteccion)), 864000000000.0)` y `CerradoATiempo = lessOrEquals(ticks(utcNow()), ticks(FechaLimiteCierre))`. En las líneas, `EstadoCaso = Cerrado`. |
+| 4 | Historial | `Accion = Cerrado`, con la duración desde la autorización. |
+| 5 | Teams al reportante y al gerente | "Avería {Folio} cerrada (Infor {N.º})". |
 
 ---
 
-## AV-02 — Valorización, tramo y aprobaciones N2–N4
+## AV-05 — Seguimiento diario
 
-**Disparador:** *Cuando se crea o modifica un elemento*, en `Averías`.
+**Disparador:** periodicidad diaria a las 07:00 `(UTC-06:00) Central America`, de lunes a sábado.
 
-**Condición del disparador:**
-```
-@equals(triggerOutputs()?['body/Estado/Value'], 'Valorizado')
-```
+Por cada estado abierto se hace una consulta (con la paginación activada) y se comparan las fechas contra su SLA:
 
-La app solo permite pasar a `Valorizado` cuando `CostoUnitarioLocal > 0`. La validación de la lista lo vuelve a exigir.
-
-### Valorización y tramo
-
-| # | Acción | Detalle |
+| Estado | Vencido si… | A quién |
 |---|---|---|
-| 1 | Obtener elemento + verificación de estado | Igual que en AV-01. |
-| 2 | Parámetros | Igual que en AV-01. |
-| 3 | Obtener elementos `Cfg_TipoCambio` | Filtro: `Title eq '{yyyy-MM actual}' and Moneda eq '{Moneda}' and Activo eq 1`. **Si está vacío:** prueba con el mes anterior, avisa al Admin por Teams "Falta el TC {Moneda} {mes}" y continúa. Si el mes anterior también falta, termina con aviso y el caso queda en `Valorizado`; cuando se cargue el TC, el Admin reprocesa el caso cambiando el estado a otro valor y de vuelta a `Valorizado`. |
-| 4 | Componer `CostoUSD` | `div(float(formatNumber(mul(float(Cantidad), float(CostoUnitarioLocal)), '0.00')), float(TC.UnidadesPorUSD))`, redondeado con `formatNumber(..., '0.00')`. |
-| 5 | Obtener elementos `Averías` (otros casos de la ventana) | Filtro: `UbicacionCodigo eq '{UbicacionCodigo}' and SKU eq '{SKU}' and FechaEnvio ge '{addDays(utcNow(), -VentanaFraccionamientoDias)}' and ID ne {ID}`. Todas son columnas indexadas. |
-| 6 | Filtrar matriz | `Estado` no en {Rechazado, Anulado, Borrador, Devuelto para corrección} y `CostoTotalUSD` no vacío. |
-| 7 | Inicializar variable `varAcum` (Float) = `CostoUSD`; *Aplicar a cada uno* → Incrementar variable con `float(item()?['CostoTotalUSD'])` | Power Automate no tiene una función para sumar matrices. Son pocos ítems, así que el bucle es barato. |
-| 8 | Componer `MontoTramo` | `max(CostoUSD, variables('varAcum'))` |
-| 9 | Obtener elementos `Cfg_Umbrales` | Filtro: `Activo eq 1`. Son pocas filas, así que se traen todas. |
-| 10 | Filtrar matriz `ReglasPais` | `PaisCodigo = {PaisCodigo}` y vigentes (`VigenteDesde <= FechaEnvio` y (`VigenteHasta` vacío o `>= FechaEnvio`)). Si queda vacío, el mismo filtro con `PaisCodigo = '*'`. |
-| 11 | Filtrar matriz `Regla` | `MontoDesdeUSD <= MontoTramo` y `MontoHastaUSD >= MontoTramo`; toma `first()`. **Si está vacío** (hueco en la configuración): avisa al Admin y aplica la fila de tramo más alto. Ante la duda se controla de más, no de menos. |
-| 12 | Componer `TramoPropio` | La misma búsqueda del paso 11 pero con `CostoUSD`. `Alerta = not(equals(TramoPropio.Nivel, Regla.Nivel))`. |
-| 13 | Actualizar elemento | `TipoCambioAplicado`, `CostoTotalUSD = CostoUSD`, `AcumuladoVentanaUSD = varAcum`, `AlertaFraccionamiento = Alerta`, `Tramo = Regla.Nivel`, `NivelesRequeridos = Regla.NivelesRequeridos`, `VersionRegla = Regla.Title`, `FechaValorizacion = utcNow()`, `FechaLimiteCierre = addDays(FechaEnvio, int(Regla.SLACierreDias))`. Si `NivelesRequeridos = 1`: `Estado = Pendiente ajuste Infor` y `FechaAprobacionFinal = utcNow()`; si no: `Estado = Pendiente N2` y `NivelActual = 2`. |
-| 14 | Historial | `Accion = Valorizado`, `Nivel = 0`, `Actor = ControlInventarios`, desde `FechaN1` hasta ahora. |
-| 15 | Condición `NivelesRequeridos = 1` | Si se cumple, salta a "Aviso de ajuste Infor". |
+| Pendiente valorización | `FechaEnvio + SLAValorizacionHoras < ahora` | CI (valorizador) |
+| Pendiente aprobación | Más de 48 h desde `FechaValorizacion` | Rol aprobador y Gerente de Logística del país (resumen) |
+| Pendiente diagnóstico ST | `FechaAprobacion + SLADiagnosticoSTDias < ahora` | ST y Logística |
+| Pendiente disposición | Más de 2 días desde la aprobación o el diagnóstico | Gerente de Tienda o del CD |
+| Pendiente autorización disposición | Según el SLA de la disposición | Gerente de Producto, Compras o CI |
+| Pendiente ejecución | `FechaAutorizacionDisposicion + SLAEjecucionDias < ahora` | CI |
+| Cualquier estado abierto | `FechaLimiteCierre < ahora` | Gerente de Logística del país (resumen) |
 
-### Bucle de aprobaciones N2–N4
-
-| # | Acción | Detalle |
-|---|---|---|
-| 16 | Inicializar variables | `varNivel` (Integer) = 2; `varPrevios` (Array) = `[toLower(ReportanteEmail), toLower(AprobadorN1.Email)]`; `varRechazado` (Boolean) = false. |
-| 17 | **Hacer hasta** `or(greater(variables('varNivel'), NivelesRequeridos), variables('varRechazado'))` | ⚠️ **Cambiar los límites del Hacer hasta:** el tiempo de espera predeterminado es `PT1H` y cortaría las aprobaciones. Hay que poner **Recuento = 10** y **Tiempo de espera = `P30D`**. |
-| 17.1 | Componer `Rol` | `Regla?[concat('RolN', string(variables('varNivel')))]` |
-| 17.2 | Resolver aprobador | En `Cfg_Aprobadores` con `Rol`: primero país + ubicación exacta, después país + `*`, después `*` + `*`. Si no hay ninguno: aviso al Admin y termina (falló). |
-| 17.3 | Segregación | Si el aprobador está en `varPrevios`, usa el suplente. Si el suplente también está, registra en el historial "Nivel {n} omitido por segregación" y sigue con el nivel siguiente. Si el nivel omitido era el último, escala al rol `Gerente de logística regional`. |
-| 17.4 | Actualizar elemento | `Estado = concat('Pendiente N', varNivel)`, `NivelActual = varNivel`. |
-| 17.5 | Crear una aprobación | Respuestas personalizadas: `Aprobar` / `Rechazar`. Título: `Avería {Folio} · USD {CostoUSD} · Tramo {Tramo} · N{n}`. Los detalles agregan a lo de N1 el costo local y en USD, el TC, la disposición propuesta, el valor recuperable estimado, quién aprobó los niveles anteriores con sus comentarios y, **si `AlertaFraccionamiento = Sí`**, un encabezado en negrita: "⚠ Acumulado del SKU en la ubicación en {Ventana} días: USD {varAcum}". |
-| 17.6 | Esperar, recordar y escalar | Igual que los pasos 12–14 de AV-01. |
-| 17.7 | **Switch** `varNivel` (2, 3, 4) → Actualizar elemento | `AprobadorN{n} = Respondio`, `FechaN{n} = utcNow()` y `ComentarioAprobacion` anexado. El Switch existe porque *Actualizar elemento* no acepta nombres de columna dinámicos. |
-| 17.8 | Historial | `Accion = Aprobado` o `Rechazado`, `Nivel = n`, con la duración. |
-| 17.9 | Si `Rechazar` | Actualizar elemento: `Estado = Rechazado`, `FechaAprobacionFinal`, `MotivoRechazo`. Teams al reportante, al jefe de ubicación y a Control de Inventarios. `varRechazado = true`. El rechazo exige comentario, igual que en AV-01. |
-| 17.10 | Si `Aprobar` | Agrega `Respondio` a `varPrevios`. Incrementa `varNivel`. |
-| 18 | Después del bucle, si `varRechazado = false` | Actualizar elemento: `Estado = Pendiente ajuste Infor`, `FechaAprobacionFinal = utcNow()`. |
-
-### Aviso de ajuste Infor
-
-Va a Control de Inventarios por Teams y lleva:
-
-- Folio, código Infor de la ubicación, SKU, cantidad y costo.
-- Disposición aprobada y **motivo de ajuste Infor** sugerido según la tabla de abajo.
-- SLA: `SLAAjusteInforDias` días.
-- Instrucción: "Registrá el ajuste en Infor y cargá en la app el N.º de ajuste y la evidencia de la disposición".
-
-También se avisa al reportante y al jefe de la ubicación que la avería está aprobada y que deben ejecutar la disposición: separar el producto para outlet, destruirlo con acta o prepararlo para el reclamo.
-
-| Disposición | Motivo de ajuste Infor | Nota |
-|---|---|---|
-| Venta outlet / como nuevo con reempaque | COMPLETAR | Normalmente es un traslado a la ubicación o el almacén de outlet, **no una baja** |
-| Reparación / reacondicionamiento | COMPLETAR | Traslado al almacén de servicio técnico |
-| Reclamo a proveedor / RTV / garantía | COMPLETAR | Traslado al almacén de reclamos hasta que se resuelva |
-| Reclamo a transportista o aseguradora | COMPLETAR | |
-| Donación / destrucción | COMPLETAR | Baja definitiva |
-
-> Esta tabla la tiene que completar Control de Inventarios de cada país con los códigos reales de Infor. Si no se define, cada país va a usar motivos distintos y la conciliación entre Infor y la lista de averías no va a cuadrar.
+Por país se arma una *Crear tabla HTML* y se manda por Teams. **Si no hay vencidos, no se manda nada.** Los umbrales acumulados y las alertas de concentración van como **alertas de datos de Power BI**, no en este flujo.
 
 ---
 
-## AV-03 — Cierre
+## Pruebas antes de producción
 
-**Disparador:** *Cuando se crea o modifica un elemento*, en `Averías`.
+Se corren en una lista de prueba con los mismos nombres internos.
 
-**Condición del disparador:**
-```
-@and(
-  equals(triggerOutputs()?['body/Estado/Value'], 'Pendiente ajuste Infor'),
-  not(empty(triggerOutputs()?['body/NumeroAjusteInfor'])),
-  not(empty(triggerOutputs()?['body/EvidenciaDisposicion']))
-)
-```
-Se escribe en una sola línea.
-
-| # | Acción | Detalle |
+| # | Caso | Esperado |
 |---|---|---|
-| 1 | Obtener elemento + verificación | Igual que en los otros flujos. |
-| 2 | Validaciones de cierre | Si `ResponsableImputable = Proveedor` y `Proveedor` está vacío, o si `NumeroAjusteInfor` ya existe en otro caso cerrado (*Obtener elementos* con `NumeroAjusteInfor eq '{x}' and ID ne {ID}`, aunque un mismo ajuste puede cubrir varios casos; en ese caso solo se avisa, no se bloquea): Teams a Control de Inventarios con lo que falta, y termina sin cerrar. |
-| 3 | Actualizar elemento | `Estado = Cerrado`, `FechaCierre = utcNow()`, `CerradoATiempo = lessOrEquals(ticks(utcNow()), ticks(FechaLimiteCierre))`. |
-| 4 | Historial | `Accion = Cerrado`, `Actor = ControlInventarios`, desde `FechaAprobacionFinal` hasta ahora (es la duración del ajuste en Infor). |
-| 5 | Teams al reportante | "La avería {Folio} quedó cerrada (ajuste Infor {N.º})". |
-
----
-
-## AV-04 — Seguimiento diario
-
-**Disparador:** Periodicidad diaria a las 07:00, zona `(UTC-06:00) Central America`, de lunes a sábado.
-
-| # | Acción | Detalle |
-|---|---|---|
-| 1 | Parámetros | |
-| 2 | Obtener elementos `Averías` con `Estado eq 'Pendiente valorización'` | **Activar paginación** (Configuración → Paginación, umbral 5000). Filtrar matriz: `FechaN1 < addHours(utcNow(), -SLAValorizacionHoras)`. |
-| 3 | Obtener elementos con `Estado eq 'Pendiente ajuste Infor'` | Filtrar matriz: `FechaAprobacionFinal < addDays(utcNow(), -SLAAjusteInforDias)`. |
-| 4 | Obtener elementos con `Estado eq 'Pendiente N1'`, `'Pendiente N2'`, `'Pendiente N3'` o `'Pendiente N4'` | Una sola consulta con `or`. Sirve para el resumen de aprobaciones en curso a más de 48 h, solo como información, porque las escalan los propios flujos. |
-| 5 | *Aplicar a cada uno* sobre `['SV','GT','HN','NI','CR','P6']` | Por país: Filtrar matriz de los pasos 2–4 → *Crear tabla HTML* (Folio, ubicación, SKU, USD y horas de atraso) → Teams a Control de Inventarios del país (pasos 2 y 3) y al Gerente de logística país (resumen con los conteos). **Si el país no tiene nada vencido, no se envía mensaje**, para que la notificación no se vuelva ruido. |
-
-**Qué queda fuera de AV-04 a propósito:** el umbral acumulado mensual por ubicación (`UmbralAcumuladoTiendaMesUSD`) y las alertas de concentración se resuelven con **alertas de datos de Power BI**. Se crea un mosaico de tarjeta en un panel y se configura una alerta, lo que solo requiere Pro. Agrupar y sumar en Power Automate gasta muchas acciones y es difícil de mantener.
-
----
-
-## Pruebas antes de salir a producción
-
-Se prueban en un sitio o lista de prueba con los mismos nombres internos.
-
-| Caso | Esperado |
-|---|---|
-| Avería de USD 40 en una tienda | N1 → valorización → `Pendiente ajuste Infor` sin N2 |
-| Avería de USD 300 | N1 → valorización → N2 → `Pendiente ajuste Infor` |
-| Avería de USD 6 000 en GTQ | Conversión con el TC del mes; N1–N4; `FechaLimiteCierre` = envío + 20 días |
-| Tres averías de USD 120 del mismo SKU y tienda en 5 días | La tercera entra en T2 con `AlertaFraccionamiento = Sí` |
-| El reportante es el jefe de tienda | N1 va al suplente |
-| N1 no responde en 48 h | Recordatorio a las 24 h y escalamiento al suplente a las 48 h; ambos quedan en el historial |
-| N1 devuelve y el reportante corrige | El mismo folio y la misma `FechaEnvio`; vuelve a N1 |
-| Rechazo sin comentario | No se rechaza; se pide de nuevo con el comentario |
-| Falta el TC del mes | Usa el mes anterior y avisa al Admin |
-| Se carga el N.º de ajuste sin evidencia | No cierra |
-| Cierre después de `FechaLimiteCierre` | `CerradoATiempo = No` |
-| Dos ediciones seguidas en `Enviado` | Una sola aprobación N1 (verificación del paso 1) |
+| 1 | Tienda: 1 línea de USD 80 | N1, aprueba el Gerente de Tienda |
+| 2 | Tienda: 1 línea de USD 100.00 | N1 (el límite está incluido) |
+| 3 | Tienda: 1 línea de USD 350 | N2, aprueba Operaciones local |
+| 4 | Tienda: 2 líneas, de USD 50 y USD 700 | N3 por el unitario máximo [D3] |
+| 5 | Tienda: 40 unidades de USD 90 (USD 3 600) | N3 por caso > 3 000 [D1] |
+| 6 | CD: 1 línea de USD 150 | N3, aprueba CI sin pasar por Operaciones |
+| 7 | Bodega externa: USD 60 | Matriz CD, N1, aprueba el Gerente de Logística del CD [D7] |
+| 8 | Última milla con tienda vendedora SV-T014 | Aprueba el gerente de SV-T014 |
+| 9 | Tercer caso imputable al proveedor del mismo SKU en 60 días, con `Aplicar` | N3 con motivo "Recurrencia SKU" |
+| 10 | El mismo caso, con `Observar` | Nivel por monto y `RecurrenciaObservada = Sí` |
+| 11 | El valorizador de CI es también el aprobador de N3 | Va al suplente |
+| 12 | Detección registrada 30 h antes del envío | `ReporteTardio = Sí` y aviso a CI |
+| 13 | Aprobación sin `Consolidado` | Se devuelve con el motivo |
+| 14 | Falla técnica (TP5) aprobada | Pasa por Pendiente diagnóstico ST |
+| 15 | Diagnóstico No reparable y disposición Reincorporación | AV-03 lo devuelve a Pendiente disposición |
+| 16 | Venta con descuento | El Gerente de Producto carga el % y la autoriza; si pasan 72 h, recordatorio y suplente |
+| 17 | Destrucción | CI valida; no cierra sin fotos posteriores ni acta |
+| 18 | Origen Transporte tercerizado | `MontoFacturableUSD = RetailTotalUSD` y aviso a Finanzas |
+| 19 | Cierre después de `FechaLimiteCierre` | `CerradoATiempo = No` |
+| 20 | Falta el TC del mes | Usa el del mes anterior y avisa al Admin |

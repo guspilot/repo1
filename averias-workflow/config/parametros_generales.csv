@@ -1,10 +1,15 @@
 ﻿Clave,Valor,Descripcion
-HorasRecordatorio,24,Horas sin respuesta antes de recordatorio por Teams al aprobador
-HorasEscalamientoSuplente,48,Horas sin respuesta antes de reasignar la aprobación al suplente
-SLAValorizacionHoras,24,Horas para que Control de Inventarios valorice con costo Infor
-SLAAjusteInforDias,3,Días desde aprobación final hasta registrar el número de ajuste Infor
-UmbralAcumuladoTiendaMesUSD,3000,Acumulado mensual por ubicación que dispara aviso al Gerente de logística país
-MaxDiasDeteccionAReporte,3,Días máximos entre detección y reporte; si se excede se marca ReporteTardio
+MaxHorasDeteccionAReporte,24,POL-CO-0031 8.2.1: plazo máximo de reporte desde la detección
+SLAValorizacionHoras,24,Procedimiento: horas para que CI valorice con costo y retail de Infor
+HorasRecordatorio,24,Horas sin respuesta antes del recordatorio por Teams al aprobador
+HorasEscalamientoSuplente,40,Horas sin respuesta antes de reasignar al suplente (deja 8 h antes del SLA de 48 h de la política)
+SLAAutorizacionDescuentoHoras,72,POL-CO-0031 3 y 7.6: Gerente de Producto autoriza venta con descuento
+SLAValidacionDestruccionHoras,48,Procedimiento: CI valida destrucción o donación (7.8.1)
+SLAConfirmacionRTVHoras,48,Procedimiento: Compras confirma devolución a proveedor (7.7)
+SLADiagnosticoSTDias,5,Procedimiento: días para diagnóstico de ServiTotal / Servitech (7.2.1)
+SLAEjecucionDias,3,Procedimiento: días desde la autorización de la disposición hasta registrar movimiento Infor y evidencia
+CasoMaxSinNivel3USD,3000,D1: caso (suma de líneas) mayor a este monto va a nivel 3 aunque el unitario sea menor (POL-CO-0031 7.3.2)
+NotificarRegionalCasoUSD,3000,D6: casos de CD mayores a este monto se notifican (no se aprueban) al Gerente de Logística regional
 RecurrenciaModo,Observar,Observar = marca sin cambiar aprobador (solo 4 semanas de piloto); Aplicar = recurrencia envía a nivel 3 (Control de Inventarios)
 RecSKU_Piso,3,R1: mínimo de casos imputables al proveedor del mismo SKU (el umbral real es máx(piso; k de la tasa propia))
 RecSKU_VentanaDias,60,R1: ventana en días (30-60 por política)

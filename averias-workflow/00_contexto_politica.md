@@ -86,7 +86,9 @@ Las métricas se presentan en un **tablero corporativo en tiempo real**, revisad
 
 ---
 
-## Impacto sobre el diseño actual (documentos 01–05)
+## Impacto sobre el diseño (documentos 01–05) — ✅ aplicado
+
+> **Estado:** los 15 cambios de esta tabla ya están aplicados en los documentos 01, 03, 04 y 05 y en los catálogos. La tabla se conserva como registro de qué cambió y por qué.
 
 Partes del diseño que hice antes de leer la política **no cumplen** y hay que cambiarlas:
 
@@ -111,6 +113,9 @@ Partes del diseño que hice antes de leer la política **no cumplen** y hay que 
 Lo que **ya cumple**: el workflow único digital y móvil, la trazabilidad en `Averias_Historial`, la valorización a costo de Infor (coincide con 7.3.1 "costo de adquisición"), el cierre ligado a la disposición final, la segregación (coincide con "Operaciones como instancia independiente") y la evidencia fotográfica obligatoria.
 
 ## Huecos de la propia política que el procedimiento tiene que resolver
+
+> **Estado:** el procedimiento aplica las recomendaciones de esta tabla. D2 está validada con el simulacro. D5 (la corrección del texto de la política) queda pendiente para la próxima revisión del documento.
+
 
 Como sos el autor de la política, estas decisiones son tuyas. Para cada una dejo mi recomendación.
 

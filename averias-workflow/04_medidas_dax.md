@@ -1,76 +1,97 @@
 # 04 — Modelo Power BI y medidas DAX
 
+Alineado con **POL-CO-0031 v2.0**, sección 9. La política exige que todos los KPIs estén en un **tablero corporativo** que se revisa mensualmente (9.3). Las medidas que corresponden a un KPI de la política llevan la marca ★ y la sección de origen.
+
 ## Conexión (sin gateway ni TI)
 
-- Conector **SharePoint Online List** con la cuenta propia. Para orígenes SharePoint Online la actualización programada en el servicio **no necesita gateway**.
-- Publicar en un área de trabajo propia. Para compartir hace falta **Power BI Pro** para quien publica y para quien consume (o capacidad Premium/Fabric). Si los gerentes de país no tienen Pro, ese es el único bloqueo real de licencias y hay que saberlo antes de construir.
-- Uso la **implementación 1.0** del conector porque devuelve los **nombres internos** de las columnas. Por eso el esquema exige crearlas sin tildes ni espacios. Además, como la lista guarda copias en texto de los códigos (`UbicacionCodigo`, `TipoAveriaCodigo`, `CausaCodigo`, `ReportanteEmail`), no hace falta expandir columnas de búsqueda ni de persona.
+- Se usa el conector **SharePoint Online List**, implementación 1.0 (`ApiVersion = 15`), porque devuelve los **nombres internos** de las columnas. Con orígenes en SharePoint Online, la actualización programada no necesita gateway.
+- Para compartir el tablero, quien lo publica y quien lo consume necesitan **Power BI Pro**.
+- **Datos que no están en el workflow.** Tres KPIs de la política necesitan datos de Infor o de Ventas. Sin integración, se cargan como Excel **mensuales** en una biblioteca del mismo sitio, `BI_Externos`, exportados de los reportes existentes:
 
-## Power Query: tabla `Averias`
+| Archivo (tabla de Excel) | Columnas | Fuente | KPI que habilita |
+|---|---|---|---|
+| `Ext_VentasNetas.xlsx` (tabla `VentasNetas`) | Periodo (fecha, día 1 del mes), PaisCodigo, VentasNetasUSD | BI de ventas | Costo de averías vs. ventas netas [9.1] |
+| `Ext_Inventario.xlsx` (tabla `Inventario`) | Periodo, PaisCodigo, InvPromCostoUSD, InvPromRetailUSD | Infor | Índice general de averías [9.1] |
+| `Ext_Recepciones.xlsx` (tabla `Recepciones`) | Periodo, PaisCodigo, Proveedor, UnidadesRecibidas | Infor (recepciones) | Tasa de averías por proveedor [9.2] |
+| `Ext_VentasOutlet.xlsx` (tabla `VentasOutlet`) — opcional | Periodo, PaisCodigo, CostoVendidoAveriadoUSD | BI de ventas (outlet o remate) | Rotación de inventario averiado [9.2], versión exacta |
+| `Ext_Auditorias.xlsx` (tabla `Auditorias`) | Fecha, PaisCodigo, UbicacionCodigo, TipoHallazgo (Proceso / Inventario no declarado), Hallazgos | CI | Tasa de cumplimiento de la política [9.2] |
+
+El nombre de `Proveedor` en `Ext_Recepciones` tiene que ser **el mismo texto de Infor** que CI carga en las líneas.
+
+## Power Query
+
+### `Averias`
 
 ```m
 let
-    Sitio      = "https://<tenant>.sharepoint.com/sites/<sitio-averias>",
-    Origen     = SharePoint.Tables(Sitio, [ApiVersion = 15]),
-    Lista      = Origen{[Title = "Averías"]}[Items],
-    Columnas   = Table.SelectColumns(Lista, {
-        "Id", "Title", "PaisCodigo", "UbicacionCodigo", "TipoUbicacion", "EtapaDeteccion",
-        "TipoAveriaCodigo", "CausaCodigo", "ResponsableImputable", "DisposicionPropuesta",
-        "SKU", "Proveedor", "Cantidad", "Moneda", "CostoTotalLocal", "CostoTotalUSD",
-        "ValorRecuperableEstUSD", "MontoRecuperadoUSD", "Estado", "Tramo", "NivelesRequeridos",
-        "VersionRegla", "AlertaFraccionamiento", "ReporteTardio", "CerradoATiempo",
-        "ReportanteEmail", "FechaDeteccion", "FechaEnvio", "FechaValorizacion",
-        "FechaAprobacionFinal", "FechaLimiteCierre", "FechaCierre", "NumeroAjusteInfor"
+    Sitio    = "https://<tenant>.sharepoint.com/sites/<sitio-averias>",
+    Lista    = SharePoint.Tables(Sitio, [ApiVersion = 15]){[Title = "Averías"]}[Items],
+    Cols     = Table.SelectColumns(Lista, {
+        "Id","Title","PaisCodigo","UbicacionCodigo","TipoUbicacion","MatrizAplicable","TiendaVendedoraCodigo",
+        "EtapaDeteccion","TipoAveriaCodigo","Origen","CausaCodigo","Consolidado","Estado","NivelAprobacion",
+        "MotivoNivel","RecurrenciaObservada","RolAprobador","VersionMatriz","DisposicionPropuesta","Recuperacion",
+        "DiagnosticoST","DescuentoAutorizadoPct","CostoTotalUSD","CostoUnitarioMaxUSD","RetailTotalUSD",
+        "MontoFacturableUSD","MontoRecuperadoUSD","HorasDeteccionAReporte","ReporteTardio","DiasResolucionE2E",
+        "CerradoATiempo","ReportanteEmail","FechaHoraDeteccion","FechaEnvio","FechaValorizacion","FechaAprobacion",
+        "FechaConsolidacion","FechaAutorizacionDisposicion","FechaLimiteCierre","FechaCierre","NumeroAjusteInfor"
     }, MissingField.UseNull),
-    Tipos      = Table.TransformColumnTypes(Columnas, {
-        {"Id", Int64.Type}, {"Cantidad", Int64.Type}, {"NivelesRequeridos", Int64.Type},
-        {"CostoTotalLocal", type number}, {"CostoTotalUSD", Currency.Type},
-        {"ValorRecuperableEstUSD", Currency.Type}, {"MontoRecuperadoUSD", Currency.Type},
-        {"AlertaFraccionamiento", type logical}, {"ReporteTardio", type logical},
-        {"CerradoATiempo", type logical}, {"FechaDeteccion", type date},
-        {"FechaEnvio", type datetime}, {"FechaValorizacion", type datetime},
-        {"FechaAprobacionFinal", type datetime}, {"FechaLimiteCierre", type datetime},
-        {"FechaCierre", type datetime}
+    Tipos    = Table.TransformColumnTypes(Cols, {
+        {"Id", Int64.Type}, {"CostoTotalUSD", Currency.Type}, {"CostoUnitarioMaxUSD", Currency.Type},
+        {"RetailTotalUSD", Currency.Type}, {"MontoFacturableUSD", Currency.Type}, {"MontoRecuperadoUSD", Currency.Type},
+        {"HorasDeteccionAReporte", type number}, {"DiasResolucionE2E", type number}, {"DescuentoAutorizadoPct", type number},
+        {"Consolidado", type logical}, {"ReporteTardio", type logical}, {"CerradoATiempo", type logical},
+        {"RecurrenciaObservada", type logical},
+        {"FechaHoraDeteccion", type datetime}, {"FechaEnvio", type datetime}, {"FechaValorizacion", type datetime},
+        {"FechaAprobacion", type datetime}, {"FechaConsolidacion", type datetime},
+        {"FechaAutorizacionDisposicion", type datetime}, {"FechaLimiteCierre", type datetime}, {"FechaCierre", type datetime}
     }),
-    // SharePoint guarda en UTC. Los 5 países de Centroamérica están en UTC-6 sin horario de verano.
-    // Si el país 6 tiene otro huso, hay que reemplazar el -6 fijo por una tabla de husos por PaisCodigo.
-    ALocal     = (d) => if d = null then null
-                 else DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(DateTime.AddZone(d, 0), -6)),
-    Locales    = List.Accumulate(
-                    {"FechaEnvio", "FechaValorizacion", "FechaAprobacionFinal", "FechaLimiteCierre", "FechaCierre"},
-                    Tipos,
-                    (t, c) => Table.TransformColumns(t, {{c, ALocal, type datetime}})),
-    // Columnas de fecha (sin hora) para las relaciones con Calendario
-    ConDias    = Table.AddColumn(
-                 Table.AddColumn(
-                 Table.AddColumn(
-                 Table.AddColumn(Locales,
-                    "FechaEnvioDia",       each if [FechaEnvio] = null then null else Date.From([FechaEnvio]), type date),
-                    "FechaAprobacionDia",  each if [FechaAprobacionFinal] = null then null else Date.From([FechaAprobacionFinal]), type date),
-                    "FechaLimiteDia",      each if [FechaLimiteCierre] = null then null else Date.From([FechaLimiteCierre]), type date),
-                    "FechaCierreDia",      each if [FechaCierre] = null then null else Date.From([FechaCierre]), type date)
+    // SharePoint guarda en UTC. Los 5 países de Centroamérica están en UTC-6, sin horario de verano.
+    // Si el país 6 tiene otro huso, reemplazar el -6 por una tabla de husos por PaisCodigo.
+    ALocal   = (d) => if d = null then null else DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(DateTime.AddZone(d, 0), -6)),
+    Fechas   = {"FechaHoraDeteccion","FechaEnvio","FechaValorizacion","FechaAprobacion","FechaConsolidacion",
+                "FechaAutorizacionDisposicion","FechaLimiteCierre","FechaCierre"},
+    Locales0 = List.Accumulate(Fechas, Tipos, (t, c) => Table.TransformColumns(t, {{c, ALocal, type datetime}})),
+    // Las columnas de elección múltiple pueden llegar como lista: se pasan a texto separado por "; "
+    Locales  = Table.TransformColumns(Locales0, {
+                 {"MotivoNivel", each if _ is list then Text.Combine(List.Transform(_, Text.From), "; ") else _, type text},
+                 {"Recuperacion", each if _ is list then Text.Combine(List.Transform(_, Text.From), "; ") else _, type text}}),
+    Dia      = (t, src, dst) => Table.AddColumn(t, dst, each if Record.Field(_, src) = null then null else Date.From(Record.Field(_, src)), type date),
+    ConDias  = Dia(Dia(Dia(Dia(Dia(Locales,
+                 "FechaEnvio", "FechaEnvioDia"),
+                 "FechaAprobacion", "FechaAprobacionDia"),
+                 "FechaLimiteCierre", "FechaLimiteDia"),
+                 "FechaCierre", "FechaCierreDia"),
+                 "FechaHoraDeteccion", "FechaDeteccionDia")
 in
     ConDias
 ```
 
-Tablas adicionales, cargadas con el mismo patrón: `Averias_Historial`, `Cat_Ubicacion`, `Cat_TipoAveria`, `Cat_Causa` y `Cfg_AccesoBI` (para RLS).
+Antes de producción hay que verificar en el tenant que las fechas del conector 1.0 llegan como `datetime` UTC. Si llegan como `datetimezone`, se quita `DateTime.AddZone`.
 
-## Relaciones
+### `Averias_Lineas`
 
-| Desde (muchos) | Hacia (uno) | Activa |
-|---|---|---|
-| `Averias[FechaEnvioDia]` | `Calendario[Fecha]` | **Sí** |
-| `Averias[FechaAprobacionDia]` | `Calendario[Fecha]` | No (se usa con `USERELATIONSHIP`) |
-| `Averias[FechaLimiteDia]` | `Calendario[Fecha]` | No |
-| `Averias[FechaCierreDia]` | `Calendario[Fecha]` | No |
-| `Averias[UbicacionCodigo]` | `Cat_Ubicacion[Title]` | Sí |
-| `Averias[TipoAveriaCodigo]` | `Cat_TipoAveria[Title]` | Sí |
-| `Averias[CausaCodigo]` | `Cat_Causa[Title]` | Sí |
-| `Averias_Historial[AveriaID]` | `Averias[Id]` | Sí |
+Se carga con el mismo patrón y las columnas `Id`, `AveriaID`, `PaisCodigo`, `UbicacionCodigo`, `SKU`, `Proveedor`, `Cantidad`, `SinSerie`, `SubtipoCodigo`, `CostoUnitarioUSD`, `CostoLineaUSD`, `RetailLineaUSD`, `OrigenImputable`, `EstadoCaso` y `FechaEnvio` (más `FechaEnvioDia`).
 
-El **país siempre se filtra con `Cat_Ubicacion[PaisCodigo]`** (la dimensión), no con la columna de la tabla de hechos, para que el filtro de país y el RLS actúen sobre una sola columna.
+### Excel externos
 
-## Tabla de fechas
+```m
+let
+    Archivos = SharePoint.Files("https://<tenant>.sharepoint.com/sites/<sitio-averias>", [ApiVersion = 15]),
+    Archivo  = Archivos{[Name = "Ext_VentasNetas.xlsx", #"Folder Path" = "https://<tenant>.sharepoint.com/sites/<sitio-averias>/BI_Externos/"]}[Content],
+    Tabla    = Excel.Workbook(Archivo, true){[Item = "VentasNetas", Kind = "Table"]}[Data],
+    Tipos    = Table.TransformColumnTypes(Tabla, {{"Periodo", type date}, {"PaisCodigo", type text}, {"VentasNetasUSD", Currency.Type}})
+in
+    Tipos
+```
+
+Las demás tablas externas se cargan igual. También se cargan `Cat_Ubicacion`, `Cat_TipoAveria`, `Cat_Subtipo`, `Cat_Causa`, `Averias_Historial` y `Cfg_AccesoBI`.
+
+## Dimensiones
+
+`Dim_Pais` y `Dim_Proveedor` se arman en **Power Query**, no en DAX. Una tabla calculada que lee de las mismas tablas con las que después se relaciona puede dar error de dependencia circular.
+
+- **`Dim_Pais`:** referencia a `Cat_Ubicacion`, quedarse solo con `PaisCodigo` y quitar duplicados.
+- **`Dim_Proveedor`:** anexar la columna `Proveedor` de `Averias_Lineas` y de `Ext_Recepciones`, quitar nulos y quitar duplicados.
 
 ```dax
 Calendario =
@@ -78,190 +99,231 @@ ADDCOLUMNS (
     CALENDAR ( DATE ( 2026, 1, 1 ), DATE ( YEAR ( TODAY () ) + 1, 12, 31 ) ),
     "Año", YEAR ( [Date] ),
     "Mes", FORMAT ( [Date], "YYYY-MM" ),
-    "MesNum", MONTH ( [Date] ),
-    "Semana", WEEKNUM ( [Date], 2 ),
+    "InicioMes", DATE ( YEAR ( [Date] ), MONTH ( [Date] ), 1 ),
     "DiaHabil", WEEKDAY ( [Date], 2 ) <= 5
 )
 ```
 
-Renombrá `[Date]` a `Fecha` y marcala como tabla de fechas.
+En `Calendario`, renombrá `[Date]` a `Fecha` y marcala como tabla de fechas.
+
+## Relaciones
+
+| Desde (muchos) | Hacia (uno) | Activa |
+|---|---|---|
+| `Cat_Ubicacion[PaisCodigo]` | `Dim_Pais[PaisCodigo]` | Sí |
+| `Averias[UbicacionCodigo]` | `Cat_Ubicacion[Title]` | Sí |
+| `Averias[TipoAveriaCodigo]` | `Cat_TipoAveria[Title]` | Sí |
+| `Averias[CausaCodigo]` | `Cat_Causa[Title]` | Sí |
+| `Averias[FechaEnvioDia]` | `Calendario[Fecha]` | **Sí** |
+| `Averias[FechaAprobacionDia]`, `[FechaLimiteDia]`, `[FechaCierreDia]`, `[FechaDeteccionDia]` | `Calendario[Fecha]` | No (se usan con `USERELATIONSHIP`) |
+| `Averias_Lineas[AveriaID]` | `Averias[Id]` | Sí |
+| `Averias_Lineas[Proveedor]` | `Dim_Proveedor[Proveedor]` | Sí |
+| `Averias_Lineas[SubtipoCodigo]` | `Cat_Subtipo[Title]` | Sí |
+| `Averias_Historial[AveriaID]` | `Averias[Id]` | Sí |
+| `Ext_*[PaisCodigo]` | `Dim_Pais[PaisCodigo]` | Sí |
+| `Ext_*[Periodo]` | `Calendario[Fecha]` | Sí |
+| `Ext_Recepciones[Proveedor]` | `Dim_Proveedor[Proveedor]` | Sí |
+
+El país **siempre** se filtra desde `Dim_Pais`, así el filtro y el RLS llegan tanto a las averías como a los Excel externos.
 
 ## Medidas
 
-Las medidas están agrupadas por pregunta de negocio. Las que piden explícitamente están marcadas con ★.
-
-### Volumen: averías por país y tipo ★
+### Base
 
 ```dax
-Averias =
-COUNTROWS ( Averias )
-
-Averias enviadas =
-CALCULATE ( [Averias], NOT ISBLANK ( Averias[FechaEnvio] ) )
-
--- Excluye borradores, anulados y rechazados: es el volumen "real" de avería
 Averias validas =
-CALCULATE (
-    [Averias],
-    NOT Averias[Estado] IN { "Borrador", "Anulado", "Rechazado" }
-)
+CALCULATE ( COUNTROWS ( Averias ), NOT Averias[Estado] IN { "Borrador", "Anulado", "Rechazado" } )
 
--- Participación de cada tipo dentro de lo que está filtrado (p. ej. dentro del país)
-% del total (tipo) =
-DIVIDE (
-    [Averias validas],
-    CALCULATE ( [Averias validas], ALLSELECTED ( Cat_TipoAveria ) )
-)
-
--- Normaliza por la cantidad de tiendas para comparar países de distinto tamaño
-Averias por tienda por mes =
-VAR Tiendas =
-    CALCULATE ( DISTINCTCOUNT ( Cat_Ubicacion[Title] ), Cat_Ubicacion[Tipo] = "Tienda", Cat_Ubicacion[Activo] = TRUE () )
-VAR Meses =
-    DISTINCTCOUNT ( Calendario[Mes] )
-RETURN
-    DIVIDE ( CALCULATE ( [Averias validas], Cat_Ubicacion[Tipo] = "Tienda" ), Tiendas * Meses )
-```
-
-Para "averías por país y tipo" se usa una matriz con `Cat_Ubicacion[PaisCodigo]` en filas, `Cat_TipoAveria[Nombre]` en columnas y `[Averias validas]` y `[% del total (tipo)]` como valores.
-
-### Costo ★
-
-```dax
-Costo USD =
+Costo averias USD =
 CALCULATE ( SUM ( Averias[CostoTotalUSD] ), NOT Averias[Estado] IN { "Borrador", "Anulado", "Rechazado" } )
 
--- Costo aprobado, fechado por la fecha de aprobación final (es cuando la pérdida queda reconocida)
+Retail averias USD =
+CALCULATE ( SUM ( Averias[RetailTotalUSD] ), NOT Averias[Estado] IN { "Borrador", "Anulado", "Rechazado" } )
+
 Costo aprobado USD =
 CALCULATE (
     SUM ( Averias[CostoTotalUSD] ),
-    Averias[Estado] IN { "Pendiente ajuste Infor", "Cerrado" },
+    NOT Averias[Estado] IN { "Borrador", "Anulado", "Rechazado", "Enviado", "Pendiente valorización", "Valorizado", "Pendiente aprobación", "Devuelto para corrección" },
     USERELATIONSHIP ( Calendario[Fecha], Averias[FechaAprobacionDia] )
 )
 
--- ★ Costo acumulado en el año (se reinicia en enero)
 Costo acumulado YTD =
 TOTALYTD ( [Costo aprobado USD], Calendario[Fecha] )
 
--- ★ Costo acumulado continuo, desde el inicio del proyecto (para la curva de tendencia)
-Costo acumulado =
-VAR FechaMax = MAX ( Calendario[Fecha] )
-RETURN
-    CALCULATE ( [Costo aprobado USD], Calendario[Fecha] <= FechaMax, ALL ( Calendario ) )
-
-Costo acumulado año anterior =
-CALCULATE ( [Costo acumulado YTD], SAMEPERIODLASTYEAR ( Calendario[Fecha] ) )
-
-Recuperado USD =
+Unidades averiadas =
 CALCULATE (
-    SUM ( Averias[MontoRecuperadoUSD] ),
-    USERELATIONSHIP ( Calendario[Fecha], Averias[FechaAprobacionDia] )
+    SUM ( Averias_Lineas[Cantidad] ),
+    NOT Averias_Lineas[EstadoCaso] IN { "Borrador", "Anulado", "Rechazado" }
 )
-
-Perdida neta USD =
-[Costo aprobado USD] - [Recuperado USD]
-
-% recuperado =
-DIVIDE ( [Recuperado USD], [Costo aprobado USD] )
-
--- Cuánto de lo imputable a terceros se recupera de verdad
-% recuperado imputable a terceros =
-VAR Imputable =
-    CALCULATE ( [Costo aprobado USD], Averias[ResponsableImputable] IN { "Proveedor", "Transportista", "Aseguradora" } )
-VAR Recup =
-    CALCULATE ( [Recuperado USD], Averias[ResponsableImputable] IN { "Proveedor", "Transportista", "Aseguradora" } )
-RETURN
-    DIVIDE ( Recup, Imputable )
 ```
 
-### Tiempo de aprobación ★
-
-Va de `FechaEnvio` a `FechaAprobacionFinal` (incluye N1, valorización y N2–N4) y se fecha por la aprobación final. La **mediana** es la cifra principal: la distribución tiene cola larga y el promedio la exagera.
+### KPIs a nivel compañía [9.1]
 
 ```dax
-Horas aprobacion (mediana) =
+-- ★ 9.1 Costo de averías vs. ventas netas
+% Costo averias vs ventas netas =
+DIVIDE ( [Costo averias USD], SUM ( Ext_VentasNetas[VentasNetasUSD] ) )
+
+-- ★ 9.1 Índice general de averías, a costo y a retail, sobre el inventario promedio mensual
+-- Con varios meses seleccionados, el denominador es el promedio de los inventarios mensuales.
+Indice general averias (costo) =
+DIVIDE ( [Costo averias USD], AVERAGEX ( VALUES ( Calendario[InicioMes] ), CALCULATE ( SUM ( Ext_Inventario[InvPromCostoUSD] ) ) ) )
+
+Indice general averias (retail) =
+DIVIDE ( [Retail averias USD], AVERAGEX ( VALUES ( Calendario[InicioMes] ), CALCULATE ( SUM ( Ext_Inventario[InvPromRetailUSD] ) ) ) )
+
+-- ★ 9.1 Tiempo de resolución promedio E2E (días desde la detección hasta la disposición final), según la fecha de cierre
+Dias resolucion E2E (promedio) =
 CALCULATE (
-    MEDIANX (
-        FILTER ( Averias, NOT ISBLANK ( Averias[FechaEnvio] ) && NOT ISBLANK ( Averias[FechaAprobacionFinal] ) ),
-        DATEDIFF ( Averias[FechaEnvio], Averias[FechaAprobacionFinal], MINUTE ) / 60
-    ),
-    USERELATIONSHIP ( Calendario[Fecha], Averias[FechaAprobacionDia] )
+    AVERAGE ( Averias[DiasResolucionE2E] ),
+    Averias[Estado] = "Cerrado",
+    USERELATIONSHIP ( Calendario[Fecha], Averias[FechaCierreDia] )
 )
 
+Dias resolucion E2E (mediana) =
+CALCULATE (
+    MEDIAN ( Averias[DiasResolucionE2E] ),
+    Averias[Estado] = "Cerrado",
+    USERELATIONSHIP ( Calendario[Fecha], Averias[FechaCierreDia] )
+)
+```
+
+### KPIs por área [9.2]
+
+```dax
+-- ★ 9.2 Índice de averías por tipo y origen, a costo y a retail. En una matriz: tipo en filas, origen en columnas.
+Indice tipo-origen (costo) =
+DIVIDE (
+    [Costo averias USD],
+    CALCULATE ( [Costo averias USD], ALLSELECTED ( Cat_TipoAveria ), ALLSELECTED ( Averias[Origen] ) )
+)
+
+Indice tipo-origen (retail) =
+DIVIDE (
+    [Retail averias USD],
+    CALCULATE ( [Retail averias USD], ALLSELECTED ( Cat_TipoAveria ), ALLSELECTED ( Averias[Origen] ) )
+)
+
+-- ★ 9.2 Porcentaje de inventario averiado consolidado
+% consolidado (costo) =
+DIVIDE ( CALCULATE ( [Costo averias USD], Averias[Consolidado] = TRUE () ), [Costo averias USD] )
+
+% consolidado (retail) =
+DIVIDE ( CALCULATE ( [Retail averias USD], Averias[Consolidado] = TRUE () ), [Retail averias USD] )
+
+-- ★ 9.2 Tiempo de reporte promedio (horas desde la detección hasta el reporte)
+Horas reporte (promedio) =
+CALCULATE ( AVERAGE ( Averias[HorasDeteccionAReporte] ), NOT Averias[Estado] IN { "Borrador", "Anulado" } )
+
+% reportes fuera de 24 h =
+DIVIDE ( CALCULATE ( [Averias validas], Averias[ReporteTardio] = TRUE () ), [Averias validas] )
+
+-- ★ 9.2 Tiempo de aprobación promedio: horas de la gerencia, desde que el caso le llega (valorizado) hasta su decisión.
+-- Es lo que mide el SLA de 48 h. Se fecha por la decisión.
 Horas aprobacion (promedio) =
 CALCULATE (
     AVERAGEX (
-        FILTER ( Averias, NOT ISBLANK ( Averias[FechaEnvio] ) && NOT ISBLANK ( Averias[FechaAprobacionFinal] ) ),
-        DATEDIFF ( Averias[FechaEnvio], Averias[FechaAprobacionFinal], MINUTE ) / 60
+        FILTER ( Averias, NOT ISBLANK ( Averias[FechaValorizacion] ) && NOT ISBLANK ( Averias[FechaAprobacion] ) ),
+        DATEDIFF ( Averias[FechaValorizacion], Averias[FechaAprobacion], MINUTE ) / 60
     ),
     USERELATIONSHIP ( Calendario[Fecha], Averias[FechaAprobacionDia] )
 )
 
-Horas aprobacion (P90) =
+% aprobaciones dentro de 48 h =
 CALCULATE (
-    PERCENTILEX.INC (
-        FILTER ( Averias, NOT ISBLANK ( Averias[FechaEnvio] ) && NOT ISBLANK ( Averias[FechaAprobacionFinal] ) ),
-        DATEDIFF ( Averias[FechaEnvio], Averias[FechaAprobacionFinal], MINUTE ) / 60,
-        0.9
+    DIVIDE (
+        COUNTROWS ( FILTER ( Averias, NOT ISBLANK ( Averias[FechaAprobacion] ) && DATEDIFF ( Averias[FechaValorizacion], Averias[FechaAprobacion], MINUTE ) <= 48 * 60 ) ),
+        COUNTROWS ( FILTER ( Averias, NOT ISBLANK ( Averias[FechaAprobacion] ) ) )
     ),
     USERELATIONSHIP ( Calendario[Fecha], Averias[FechaAprobacionDia] )
 )
 
--- Por nivel, desde el historial: dónde se atasca (poner Averias_Historial[Nivel] en el eje)
-Horas por nivel (mediana) =
-MEDIANX (
-    FILTER (
-        Averias_Historial,
-        Averias_Historial[Accion] IN { "Aprobado", "Rechazado", "Devuelto", "Valorizado" }
+-- Complementaria: desde el reporte hasta la decisión, incluida la valorización
+Horas reporte a decision (mediana) =
+CALCULATE (
+    MEDIANX (
+        FILTER ( Averias, NOT ISBLANK ( Averias[FechaEnvio] ) && NOT ISBLANK ( Averias[FechaAprobacion] ) ),
+        DATEDIFF ( Averias[FechaEnvio], Averias[FechaAprobacion], MINUTE ) / 60
     ),
-    Averias_Historial[DuracionHoras]
+    USERELATIONSHIP ( Calendario[Fecha], Averias[FechaAprobacionDia] )
 )
 
-% aprobaciones fuera de SLA por nivel =
-VAR SLA = 24
+-- ★ 9.2 Rotación de inventario averiado
+-- Inventario averiado de un día = casos aprobados todavía no cerrados en esa fecha, a costo.
+Inventario averiado al dia =
+VAR d = MAX ( Calendario[Fecha] )
 RETURN
-    DIVIDE (
-        COUNTROWS ( FILTER ( Averias_Historial, Averias_Historial[Accion] IN { "Aprobado", "Rechazado", "Devuelto" } && Averias_Historial[DuracionHoras] > SLA ) ),
-        COUNTROWS ( FILTER ( Averias_Historial, Averias_Historial[Accion] IN { "Aprobado", "Rechazado", "Devuelto" } ) )
+    CALCULATE (
+        SUM ( Averias[CostoTotalUSD] ),
+        REMOVEFILTERS ( Calendario ),
+        NOT ISBLANK ( Averias[FechaAprobacion] ),
+        Averias[FechaAprobacionDia] <= d,
+        OR ( ISBLANK ( Averias[FechaCierre] ), Averias[FechaCierreDia] > d ),
+        NOT Averias[Estado] IN { "Rechazado", "Anulado" }
     )
 
-Escalamientos a suplente =
-CALCULATE ( COUNTROWS ( Averias_Historial ), Averias_Historial[Accion] = "Escalado a suplente" )
+Inventario averiado promedio =
+AVERAGEX ( VALUES ( Calendario[Fecha] ), [Inventario averiado al dia] )
+
+-- Numerador exacto con el Excel de ventas outlet. Sin ese archivo se usa, como aproximación, el costo de
+-- los casos cerrados con venta con descuento (lo trasladado a outlet, no necesariamente vendido).
+Costo vendido con averia =
+VAR Exacto = SUM ( Ext_VentasOutlet[CostoVendidoAveriadoUSD] )
+VAR Aprox =
+    CALCULATE (
+        SUM ( Averias[CostoTotalUSD] ),
+        Averias[Estado] = "Cerrado",
+        Averias[DisposicionPropuesta] = "Venta con descuento (outlet / remate)",
+        USERELATIONSHIP ( Calendario[Fecha], Averias[FechaCierreDia] )
+    )
+RETURN
+    IF ( NOT ISBLANK ( Exacto ), Exacto, Aprox )
+
+Rotacion inventario averiado =
+DIVIDE ( [Costo vendido con averia], [Inventario averiado promedio] )
+
+-- ★ 9.2 Porcentaje de recuperación de costos
+% recuperacion de costos =
+DIVIDE ( SUM ( Averias[MontoRecuperadoUSD] ), SUM ( Averias[MontoFacturableUSD] ) )
+
+Pendiente de recuperar USD =
+SUM ( Averias[MontoFacturableUSD] ) - SUM ( Averias[MontoRecuperadoUSD] )
+
+-- ★ 9.2 Tasa de averías por proveedor: unidades averiadas imputables al proveedor ÷ unidades recibidas
+Unidades averiadas imputables a proveedor =
+CALCULATE ( [Unidades averiadas], Averias_Lineas[OrigenImputable] IN { "Proveedor local", "Proveedor importado" } )
+
+% Tasa averias por proveedor =
+DIVIDE ( [Unidades averiadas imputables a proveedor], SUM ( Ext_Recepciones[UnidadesRecibidas] ) )
+
+-- ★ 9.2 Recurrencia de averías por SKU: combinaciones SKU-proveedor con ≥ 3 casos en los últimos 60 días
+-- respecto de la fecha final del filtro. Es el mismo criterio que el piso de R1.
+SKU recurrentes (60 dias) =
+VAR Fin = MAX ( Calendario[Fecha] )
+VAR Piso = 3
+VAR Base =
+    CALCULATETABLE (
+        SUMMARIZE ( Averias_Lineas, Averias_Lineas[SKU], Averias_Lineas[Proveedor], "@casos", DISTINCTCOUNT ( Averias_Lineas[AveriaID] ) ),
+        REMOVEFILTERS ( Calendario ),
+        Averias_Lineas[FechaEnvioDia] > Fin - 60,
+        Averias_Lineas[FechaEnvioDia] <= Fin,
+        NOT Averias_Lineas[EstadoCaso] IN { "Borrador", "Anulado", "Rechazado" }
+    )
+RETURN
+    COUNTROWS ( FILTER ( Base, [@casos] >= Piso ) )
+
+-- ★ 9.2 Tasa de cumplimiento de la política, reportada por tipo de hallazgo (TipoHallazgo en filas)
+Hallazgos por auditoria =
+DIVIDE ( SUM ( Ext_Auditorias[Hallazgos] ), COUNTROWS ( Ext_Auditorias ) )
 ```
 
-> En `% aprobaciones fuera de SLA por nivel` el 24 está fijo. Si `SLAAprobacionHorasPorNivel` llega a variar por tramo, conviene que el flujo escriba en `Averias_Historial` una columna `SLAHoras` por fila y comparar contra ella.
-
-### Cierre a tiempo ★
-
-Van dos medidas, porque miden cosas distintas y conviene tener las dos a la vista:
-
-- **`% cerrado a tiempo`**: de lo que se cerró en el período, cuánto se cerró dentro del SLA. Mide la **calidad del cierre**, pero tiene un sesgo: los casos que siguen abiertos y vencidos no cuentan, así que el indicador **mejora cuando no se cierra nada**.
-- **`% cumplimiento SLA cierre`** (recomendado como KPI principal): toma la cohorte de casos cuyo plazo **vencía** en el período y cuenta cuántos se cerraron a tiempo. Los abiertos vencidos cuentan como incumplimiento.
+### SLA de cierre y control del procedimiento
 
 ```dax
-Cerradas =
-CALCULATE (
-    [Averias],
-    Averias[Estado] = "Cerrado",
-    USERELATIONSHIP ( Calendario[Fecha], Averias[FechaCierreDia] )
-)
-
-Cerradas a tiempo =
-CALCULATE (
-    [Averias],
-    Averias[Estado] = "Cerrado",
-    Averias[CerradoATiempo] = TRUE (),
-    USERELATIONSHIP ( Calendario[Fecha], Averias[FechaCierreDia] )
-)
-
--- ★ Calidad del cierre (sobre lo cerrado)
-% cerrado a tiempo =
-DIVIDE ( [Cerradas a tiempo], [Cerradas] )
-
--- Cohorte: casos cuyo plazo venció en el período (ya vencido a hoy)
+-- Cumplimiento del SLA E2E por cohorte de vencimiento: los abiertos vencidos cuentan como incumplimiento
 Vencen en periodo =
 CALCULATE (
-    [Averias],
+    COUNTROWS ( Averias ),
     NOT ISBLANK ( Averias[FechaLimiteCierre] ),
     Averias[FechaLimiteCierre] <= NOW (),
     NOT Averias[Estado] IN { "Rechazado", "Anulado" },
@@ -270,106 +332,88 @@ CALCULATE (
 
 Cumplen SLA cierre =
 CALCULATE (
-    [Averias],
+    COUNTROWS ( Averias ),
     Averias[FechaLimiteCierre] <= NOW (),
     Averias[Estado] = "Cerrado",
     Averias[CerradoATiempo] = TRUE (),
     USERELATIONSHIP ( Calendario[Fecha], Averias[FechaLimiteDia] )
 )
 
--- ★ KPI principal recomendado
 % cumplimiento SLA cierre =
 DIVIDE ( [Cumplen SLA cierre], [Vencen en periodo] )
 
--- Backlog vencido a hoy (independiente del filtro de fecha)
 Abiertas vencidas =
 CALCULATE (
-    [Averias],
+    COUNTROWS ( Averias ),
     NOT Averias[Estado] IN { "Cerrado", "Rechazado", "Anulado", "Borrador" },
     Averias[FechaLimiteCierre] < NOW (),
     REMOVEFILTERS ( Calendario )
 )
 
--- Aprobadas que siguen sin ajuste en Infor más allá del SLA (3 días): es el riesgo de inventario descuadrado
-Pendientes ajuste Infor vencidas =
-CALCULATE (
-    [Averias],
-    Averias[Estado] = "Pendiente ajuste Infor",
-    Averias[FechaAprobacionFinal] < NOW () - 3,
-    REMOVEFILTERS ( Calendario )
-)
-```
+-- Carga por rol aprobador (RolAprobador en filas): para vigilar las señales del documento 03
+Casos por dia habil =
+DIVIDE ( [Averias validas], CALCULATE ( COUNTROWS ( Calendario ), Calendario[DiaHabil] = TRUE () ) )
 
-### Control y antifraude
-
-```dax
-% averias con alerta de fraccionamiento =
-DIVIDE ( CALCULATE ( [Averias validas], Averias[AlertaFraccionamiento] = TRUE () ), [Averias validas] )
-
-% reportes tardios =
-DIVIDE ( CALCULATE ( [Averias validas], Averias[ReporteTardio] = TRUE () ), [Averias validas] )
-
--- Participación del reportante principal dentro de la ubicación filtrada. Más del 60 % en una tienda es para revisar.
-% concentracion top reportante =
-VAR PorReportante =
-    ADDCOLUMNS ( VALUES ( Averias[ReportanteEmail] ), "@c", [Costo USD] )
-RETURN
-    DIVIDE ( MAXX ( PorReportante, [@c] ), [Costo USD] )
-
--- Amontonamiento bajo el umbral N2 (B: 250). Un valor mayor que 1.5 es sospechoso.
-Ratio bajo umbral N2 =
-VAR U = 250
-VAR Debajo = CALCULATE ( [Averias validas], Averias[CostoTotalUSD] >= U - 50, Averias[CostoTotalUSD] < U )
-VAR Encima = CALCULATE ( [Averias validas], Averias[CostoTotalUSD] >= U, Averias[CostoTotalUSD] < U + 50 )
-RETURN
-    DIVIDE ( Debajo, Encima )
-
--- λ del país para R3a (ver 00_contexto_politica.md, D2): casos por tienda en 30 días.
--- Usar con un país filtrado y los últimos 90 días; se copia a LambdaPaisTienda30d cada trimestre.
--- El k de cada tienda sale de Cfg_TablaPoisson (columna K_alfa_1_0) con λ × FactorTamano.
-Lambda pais tienda 30d =
-VAR Tiendas =
-    CALCULATE ( DISTINCTCOUNT ( Cat_Ubicacion[Title] ), Cat_Ubicacion[Tipo] = "Tienda", Cat_Ubicacion[Activo] = TRUE () )
-VAR Dias =
-    DATEDIFF ( MIN ( Calendario[Fecha] ), MAX ( Calendario[Fecha] ), DAY ) + 1
-VAR Casos =
-    CALCULATE ( [Averias validas], Cat_Ubicacion[Tipo] = "Tienda" )
-RETURN
-    DIVIDE ( Casos, Tiendas ) * 30 / Dias
-
-% rechazo =
-DIVIDE ( CALCULATE ( [Averias], Averias[Estado] = "Rechazado" ), [Averias enviadas] )
-```
-
-### Simulación de umbrales (para recalibrar los escenarios)
-
-Se crea un parámetro "qué pasaría si" con *Modelado → Nuevo parámetro → Rango numérico*: nombre `Umbral N2`, de 50 a 2 000, con incremento de 50. Power BI genera la tabla y la medida `[Valor de Umbral N2]`.
-
-```dax
-Simulacion casos N2 =
-CALCULATE ( [Averias validas], Averias[CostoTotalUSD] >= [Valor de Umbral N2] )
-
-Simulacion % costo cubierto N2 =
+% casos N3 por recurrencia =
 DIVIDE (
-    CALCULATE ( [Costo USD], Averias[CostoTotalUSD] >= [Valor de Umbral N2] ),
-    [Costo USD]
+    CALCULATE ( [Averias validas], Averias[NivelAprobacion] = "N3", CONTAINSSTRING ( Averias[MotivoNivel], "Recurrencia" ) ),
+    CALCULATE ( [Averias validas], Averias[NivelAprobacion] = "N3" )
 )
 
-Simulacion casos N2 por dia habil =
-DIVIDE ( [Simulacion casos N2], CALCULATE ( COUNTROWS ( Calendario ), Calendario[DiaHabil] = TRUE () ) )
-```
+-- Durante el piloto en modo Observar: cuántos casos habrían ido a CI por recurrencia
+Casos con recurrencia observada =
+CALCULATE ( [Averias validas], Averias[RecurrenciaObservada] = TRUE () )
 
-Lo mismo sirve para N3 y N4 con sus propios parámetros.
+-- Amontonamiento justo debajo del umbral N1 (costo unitario de USD 90–100 contra USD 100–110). Más de 1.5 es sospechoso.
+Ratio bajo umbral N1 =
+DIVIDE (
+    CALCULATE ( [Averias validas], Averias[CostoUnitarioMaxUSD] > 90, Averias[CostoUnitarioMaxUSD] <= 100 ),
+    CALCULATE ( [Averias validas], Averias[CostoUnitarioMaxUSD] > 100, Averias[CostoUnitarioMaxUSD] <= 110 )
+)
+
+-- Concentración: participación del reportante principal en la ubicación filtrada
+% concentracion top reportante =
+VAR T = ADDCOLUMNS ( VALUES ( Averias[ReportanteEmail] ), "@c", [Costo averias USD] )
+RETURN DIVIDE ( MAXX ( T, [@c] ), [Costo averias USD] )
+
+-- λ del país para R3a (D2): casos por tienda en 30 días. Usar con un país filtrado y los últimos 90 días;
+-- se copia cada trimestre a LambdaPaisTienda30d.
+Lambda pais tienda 30d =
+VAR Tiendas = CALCULATE ( DISTINCTCOUNT ( Cat_Ubicacion[Title] ), Cat_Ubicacion[Tipo] = "Tienda", Cat_Ubicacion[Activo] = TRUE () )
+VAR Dias = DATEDIFF ( MIN ( Calendario[Fecha] ), MAX ( Calendario[Fecha] ), DAY ) + 1
+VAR Casos = CALCULATE ( [Averias validas], Averias[MatrizAplicable] = "Tienda" )
+RETURN DIVIDE ( Casos, Tiendas ) * 30 / Dias
+
+-- Tiempo por paso, desde el historial (Averias_Historial[Accion] en el eje): muestra dónde se atasca el proceso
+Horas por paso (mediana) =
+MEDIAN ( Averias_Historial[DuracionHoras] )
+
+% pasos fuera de SLA =
+DIVIDE (
+    COUNTROWS ( FILTER ( Averias_Historial, NOT ISBLANK ( Averias_Historial[SLAHoras] ) && Averias_Historial[DuracionHoras] > Averias_Historial[SLAHoras] ) ),
+    COUNTROWS ( FILTER ( Averias_Historial, NOT ISBLANK ( Averias_Historial[SLAHoras] ) ) )
+)
+```
 
 ## Seguridad por país (RLS)
 
-`Cfg_AccesoBI` es una lista con columnas `Email` y `PaisCodigo`; `*` da acceso a todos los países (plantilla en `config/acceso_bi_plantilla.csv`). En el rol `PorPais`, sobre la tabla `Cat_Ubicacion`:
+En el rol `PorPais`, sobre la tabla **`Dim_Pais`**:
 
 ```dax
 VAR Paises =
     CALCULATETABLE ( VALUES ( Cfg_AccesoBI[PaisCodigo] ), Cfg_AccesoBI[Email] = USERPRINCIPALNAME () )
 RETURN
-    "*" IN Paises || Cat_Ubicacion[PaisCodigo] IN Paises
+    "*" IN Paises || Dim_Pais[PaisCodigo] IN Paises
 ```
 
-`Cfg_AccesoBI` no se relaciona con nada; si se relacionara, el filtro del rol se propagaría al revés. Los miembros del rol se asignan en el servicio de Power BI, en la configuración de seguridad del modelo semántico, y eso lo hace el dueño del modelo sin TI.
+`Cfg_AccesoBI` no se relaciona con nada. Los miembros del rol los asigna el dueño del modelo en el servicio de Power BI, sin TI.
+
+## Alertas (sin flujo)
+
+Las **alertas de datos** de Power BI (Pro) se configuran sobre mosaicos de tarjeta en un panel:
+
+- `% reportes fuera de 24 h` > 10 %.
+- `% aprobaciones dentro de 48 h` < 90 %.
+- `Abiertas vencidas` > 0 por país.
+- `Casos por dia habil` de CI > 6.
+- `Ratio bajo umbral N1` > 1.5.

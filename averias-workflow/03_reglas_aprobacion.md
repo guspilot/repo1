@@ -1,100 +1,121 @@
-# 03 — Reglas de aprobación por umbral de costo
+# 03 — Reglas de aprobación y disposición
 
-## Principios
+Alineado con **POL-CO-0031 v2.0**. Los montos y los aprobadores salen de la política (7.3); este documento define **cómo** se aplican (el procedimiento, 1.2) y resuelve los huecos D1–D8 de [`00_contexto_politica.md`](00_contexto_politica.md).
 
-1. **El umbral se mide en `CostoTotalUSD` bruto** (cantidad × costo Infor ÷ tipo de cambio), no en la pérdida neta. El valor recuperable lo estima quien quiere que le aprueben, así que usarlo para bajar de tramo invita a la manipulación.
-2. **Todas las averías pasan por N1**, incluso las de $5. No hay autoaprobación. Las averías son un canal clásico para tapar faltantes o robo, y el costo de N1 es de unos 3 minutos por caso. El control de fondo de las averías pequeñas lo hace Power BI (concentración por reportante, tienda y SKU), no más niveles de aprobación.
-3. **Los niveles son acumulativos y secuenciales:** un caso T3 pasa por N1 → valorización → N2 → N3. No se hacen en paralelo, porque el N2 operativo es quien corrige la causa y el responsable antes de que lo vea el N3.
-4. **Anti-fraccionamiento:** el tramo se calcula sobre el **mayor** de dos valores, el costo del caso o el acumulado del mismo SKU en la misma ubicación durante los últimos `VentanaFraccionamientoDias` (7) días, contando casos no rechazados ni anulados. Si el acumulado sube el tramo, se marca `AlertaFraccionamiento = Sí` y el aprobador lo ve en el correo de aprobación.
-5. **Segregación:** nadie aprueba su propio reporte ni aprueba dos niveles del mismo caso. Si el aprobador resuelto coincide con el reportante o con un aprobador anterior, el flujo pasa al suplente; si el suplente también choca, pasa al nivel siguiente.
-6. **La regla se congela al enrutar:** `VersionRegla`, `Tramo`, `NivelesRequeridos` y `FechaLimiteCierre` se escriben una vez. Cambiar los parámetros afecta solo a los casos nuevos.
+## 1. Matriz de aprobación de la avería
 
-## Parámetros editables (sin tocar los flujos)
+Un solo aprobador por nivel, sin cadena acumulativa. Los montos son a **costo de adquisición en USD** [7.3.1].
 
-Todos viven en listas de SharePoint; editarlos no requiere TI ni cambiar los flujos.
+### Averías con matriz Tienda (tienda y última milla) [7.3.2]
 
-| Lista | Qué se edita | Ejemplo |
+| Nivel | Condición | Aprueba |
 |---|---|---|
-| `Cfg_Umbrales` | Rangos USD, niveles requeridos, roles por nivel, SLA por nivel, SLA de cierre y vigencia | Fila `*` (regional) y, si un país necesita otra cosa, una fila con su `PaisCodigo` que la reemplaza |
-| `Cfg_Parametros` | Ventana anti-fraccionamiento, horas de recordatorio y escalamiento, SLA de valorización y de ajuste Infor, umbral acumulado mensual por tienda | `VentanaFraccionamientoDias = 7` |
-| `Cfg_Aprobadores` | Quién es cada rol por país y ubicación, con su suplente | El jefe de tienda SV-T014 y su suplente |
-| `Cfg_TipoCambio` | Tipo de cambio mensual por moneda | `2026-12, GTQ, 7.70` |
+| N1 | Costo unitario máximo ≤ USD 100 **y** caso ≤ USD 3 000 **y** sin recurrencia | Gerente de Tienda (en última milla, el de la tienda vendedora) |
+| N2 | Unitario > 100 y ≤ 600 **y** caso ≤ USD 3 000 **y** sin recurrencia | Operaciones local, como instancia independiente |
+| N3 | Unitario > 600, **o** caso > USD 3 000 [D1], **o** recurrencia | Control de Inventarios — Aprobador |
 
-**Resolución de la regla:** el flujo busca en `Cfg_Umbrales` las filas `Activo = Sí` vigentes a la fecha de envío para `PaisCodigo = país del caso`. Si no hay ninguna, usa `PaisCodigo = *`. Dentro del conjunto toma la fila donde `MontoDesdeUSD <= monto <= MontoHastaUSD`.
+### Averías con matriz CD (CD, bodega externa y 3PL) [7.3.3, D7]
 
-**Resolución del aprobador:** en `Cfg_Aprobadores`, con `Rol = RolNx` y `Activo = Sí`, busca primero `PaisCodigo = país` y `UbicacionCodigo = código exacto`, después `PaisCodigo = país` y `UbicacionCodigo = *`, y por último `PaisCodigo = *` (lo usa el rol regional).
+| Nivel | Condición | Aprueba |
+|---|---|---|
+| N1 | Unitario ≤ 100 **y** caso ≤ USD 3 000 **y** sin recurrencia | Gerente de Logística del CD |
+| N3 | Unitario > 100, **o** caso > USD 3 000 [D1], **o** recurrencia | Control de Inventarios — Aprobador, **sin intervención de Operaciones** |
 
-**Cambios de versión:** para cambiar los umbrales no se editan las filas vigentes. Se pone `VigenteHasta` en las actuales y se cargan filas nuevas con otra `Version` (p. ej. `B-2027.1`) y `VigenteDesde`. Así Power BI puede comparar el desempeño antes y después.
+### Reglas de cálculo
 
-## Escenarios de umbral
+- **Costo unitario de referencia:** el **máximo** costo unitario entre las líneas del caso [D3].
+- **Costo del caso:** la suma de todas sus líneas [D8].
+- **Límites:** "hasta USD 100" incluye el 100 (N1). "Entre 100 y 600" va de 100.01 a 600. Más de 600 es N3.
+- **D1 (caso > USD 3 000 → N3):** también se aplica en el CD, por coherencia. Sin esa regla, 40 unidades de USD 90 las aprobaría solo el gerente. Se configura con `CasoMaxSinNivel3USD`.
+- **Recurrencia:** usa las reglas R1, R2, R3a y R3b validadas en el simulacro (ver D2 en `00_contexto_politica.md`). En modo `Observar` (las 4 primeras semanas del piloto) solo se marca `RecurrenciaObservada` y el nivel no cambia.
+- **Motivo del nivel:** el caso se marca con todos los motivos que apliquen (`MotivoNivel`), para que el aprobador sepa por qué le llegó.
+- **Regla congelada:** `VersionMatriz` se escribe al enrutar. Un cambio de matriz solo afecta a los casos nuevos.
 
-La decisión de costo tiene incertidumbre: hoy no conocemos la distribución real de las averías por monto. Abajo hay tres juegos de umbrales evaluados con dos volúmenes. **Las cifras de entrada son supuestos para dimensionar, no datos de Unicomer**; con 2 o 3 meses de casos reales en la lista se recalibran (ver "Recalibración").
+### Segregación
 
-### Supuestos
+- El aprobador no puede ser el reportante.
+- El aprobador de N3 (CI) no puede ser quien valorizó el caso.
+- Si hay conflicto, el caso va al **suplente** del rol. Si el suplente también tiene conflicto, va al suplente de CI y se avisa al Gerente de Logística del país.
+- **D6:** los casos de la matriz CD con costo > `NotificarRegionalCasoUSD` (USD 3 000) se **notifican** al Gerente de Logística regional. Es solo información: la política no le da un nivel de aprobación.
 
-- Volumen bajo: 2 averías por tienda al mes × 600 tiendas + 40 por CD al mes × 6 CD = **1 440 averías/mes**.
-- Volumen alto: 4 por tienda + 60 por CD = **2 760 averías/mes**.
-- Distribución por monto (USD): <50: 50 % · 50–100: 15 % · 100–250: 15 % · 250–500: 8 % · 500–1 000: 5 % · 1 000–2 500: 3.5 % · 2 500–5 000: 2 % · 5 000–10 000: 1 % · >10 000: 0.5 %. Costo promedio ≈ $385 por caso.
-- Tiempo de aprobación por caso: N1 3 min · N2 5 min · N3 8 min · N4 10 min.
-- N4 es la gerencia de logística regional (una persona para los 6 países); N3 es la gerencia de logística de cada país.
+## 2. Autorización de la disposición [7.4–7.8]
 
-### Umbrales por escenario (desde dónde entra cada nivel, USD)
+Después de aprobada la avería, la disposición física tiene su propio dueño según la política:
 
-| Escenario | N1 | N2 | N3 | N4 |
+| Disposición | Requisito previo | Autoriza | SLA | Evidencia para cerrar |
 |---|---|---|---|---|
-| A — Control | todo | ≥ 100 | ≥ 500 | ≥ 2 500 |
-| **B — Base (recomendado)** | todo | **≥ 250** | **≥ 1 000** | **≥ 5 000** |
-| C — Ágil | todo | ≥ 500 | ≥ 2 500 | ≥ 10 000 |
+| Reincorporación (reparación ST) | `DiagnosticoST = Reparable` o `Sin falla` [7.5.1] | Sin autorización adicional. El Gerente de Logística o de Tienda coordina el traslado a ST [3-#4] | — | Comprobante de reincorporación en Infor después de la reparación y la prueba [7.5.3] |
+| Venta con descuento (outlet / remate) | — | **Gerente de Producto**, que carga el % de descuento [7.6.1] | **72 h** [3-#5] | N.º de traslado a outlet en Infor |
+| Devolución a proveedor local | Origen = Proveedor local [7.7.1] | **Compras** confirma que procede según las condiciones comerciales [7.7.2.2] | 48 h | Guía de devolución y N.º de salida Infor. La NC se sigue aparte |
+| Devolución a proveedor internacional | Origen = Proveedor importado [7.7.1] | **Compras** (condiciones comerciales), con aviso a Finanzas para la provisión [7.7.3] | 48 h | Documento de NC, ajuste o compensación |
+| Destrucción | No apta para reparación ni venta [7.8.1] | **Control de Inventarios** valida antes [7.8.1] | 48 h | **Acta formal** y fotos [7.8.2], y N.º de ajuste Infor |
+| Donación | Igual que destrucción, más contrato si aplica [7.8.2] | **Control de Inventarios** | 48 h | Acta y contrato de donación, y N.º de ajuste Infor |
 
-### Resultado con volumen bajo (1 440/mes)
+**Diagnóstico técnico obligatorio** [7.2.1] cuando el tipo de avería es **TP5 (falla técnica o funcional)** o la disposición propuesta es **Reincorporación**. Si el diagnóstico es "No reparable", la app no deja elegir Reincorporación.
 
-| Escenario | Casos N2/mes | Casos N3/mes | Casos N4/mes | N3 por país por día hábil | N4 por día hábil | % del costo revisado por ≥N2 | % del costo revisado por ≥N3 | Horas de aprobación/mes (todos los niveles) |
+**La recuperación va por una vía paralela y no bloquea el cierre:**
+- Cobro a transportista u OPL **a precio retail** [5.2.1.4] → se avisa a **Finanzas y Seguros** con `MontoFacturableUSD = RetailTotalUSD`.
+- Nota de crédito o compensación del proveedor → **Compras**.
+- Reclamo a aseguradora → **Finanzas y Seguros**.
+
+## 3. SLA del procedimiento
+
+| Paso | SLA | Fuente |
+|---|---|---|
+| Reporte desde la detección | **24 h** | Política 8.2.1 |
+| Valorización (CI) | 24 h | Procedimiento |
+| Aprobación de la avería, cada nivel | **48 h** (recordatorio a las 24 h, suplente a las 40 h) | Política 3, 8.2.2 |
+| Diagnóstico ST | 5 días | Procedimiento |
+| Autorización de venta con descuento | **72 h** | Política 3, 7.6 |
+| Validación de destrucción o donación / confirmación de RTV | 48 h | Procedimiento |
+| Ejecución (movimiento Infor y evidencia) | 3 días | Procedimiento |
+| **Cierre E2E** (detección → disposición final) | N1: 10 días · N2: 15 días · N3: 20 días | Procedimiento (`SLACierreDias` en `Cfg_Matriz`) |
+
+**Por qué el suplente entra a las 40 h y no a las 48 h:** escalar en la hora 48 significa que el SLA ya se incumplió. Con 40 h el suplente tiene 8 h para responder dentro del plazo.
+
+Los SLA del procedimiento que no fija la política son **parámetros** en `Cfg_Parametros` o `Cfg_Matriz`.
+
+## 4. Escenarios de carga por aprobador
+
+La matriz ya la fija la política, así que la incertidumbre está en **cuánto trabajo le genera a cada rol**. Esa carga depende de dos cosas que todavía no sabemos: el costo unitario típico de las averías y el volumen. Calculado con `simulacion/carga_matriz.py`, que aplica la matriz y la recurrencia V3 a 10 corridas del país sintético.
+
+**Casos por día hábil, por país:**
+
+| Escenario | Casos/mes | Gerente de Tienda (N1, entre las 100 tiendas) | Operaciones local (N2) | CI tienda (N3) | Gerente Logística CD | CI CD | **CI total** | Parte de CI que llega por recurrencia |
 |---|---|---|---|---|---|---|---|---|
-| A — Control | 504 | 173 | 50 | 1.3 | 2.3 | 95 % | 81 % | 145 |
-| **B — Base** | **288** | **101** | **22** | **0.8** | **1.0** | **88 %** | **72 %** | **113** |
-| C — Ágil | 173 | 50 | 7 | 0.4 | 0.3 | 81 % | 57 % | 94 |
+| 2 casos/tienda/mes · unitario mediano USD 100 | 258 | 4.3 | 4.0 | 1.5 | 0.9 | 1.1 | **2.6** | 44 % |
+| **2 · USD 150 (base)** | 258 | 2.9 | 4.7 | 2.2 | 0.6 | 1.3 | **3.5** | 37 % |
+| 2 · USD 250 | 258 | 1.4 | 4.8 | 3.6 | 0.3 | 1.6 | **5.2** | 30 % |
+| 4 · USD 100 | 505 | 8.0 | 7.3 | 3.9 | 1.8 | 2.0 | **5.9** | 53 % |
+| 4 · USD 150 | 505 | 5.0 | 8.1 | 6.1 | 1.2 | 2.5 | **8.6** | 50 % |
+| 4 · USD 250 | 505 | 2.2 | 6.9 | 10.1 | 0.6 | 3.1 | **13.3** | 46 % |
 
-### Resultado con volumen alto (2 760/mes)
+### Lectura
 
-| Escenario | Casos N2/mes | Casos N3/mes | Casos N4/mes | N3 por país por día hábil | N4 por día hábil | % del costo revisado por ≥N2 | % del costo revisado por ≥N3 | Horas de aprobación/mes |
-|---|---|---|---|---|---|---|---|---|
-| A — Control | 966 | 331 | 97 | 2.5 | 4.4 | 95 % | 81 % | 279 |
-| **B — Base** | **552** | **193** | **41** | **1.5** | **1.9** | **88 %** | **72 %** | **217** |
-| C — Ágil | 331 | 97 | 14 | 0.7 | 0.6 | 81 % | 57 % | 181 |
+- **El Gerente de Tienda casi no carga trabajo** (~0.03 casos por tienda por día). El trabajo real cae en **Operaciones local y CI**.
+- **Con la matriz de la política, la mayoría de los casos de tienda va a Operaciones (N2):** con una mediana de USD 150 por unidad, más de la mitad de las averías pasa de USD 100 por unidad. Operaciones local recibe ~5 casos por día por país en el escenario base y ~8 en el de alto volumen. Si Operaciones local es **una sola persona por país**, hay que asignarle un suplente formal desde el día 1.
+- **CI tiene dos cargas:**
+  - **Valorizar todos los casos:** ~12 por día en el escenario base, a 2–3 minutos cada uno (~40 min/día).
+  - **Aprobar los N3:** entre 3.5 y 13 por día. A ~10 minutos por caso, eso va de 35 minutos a más de 2 horas diarias.
+  - **Con más de 6 casos N3 por día, CI necesita un analista con tiempo asignado a averías.** De lo contrario el SLA de 48 h no se cumple.
+- **La recurrencia aporta entre el 30 % y el 50 % de la carga de CI.** Es la palanca configurable si CI se satura: bajar `RecTienda_Alfa` a 0.005 o subir `RecTienda_MontoUSD` a 5 000, sin tocar la matriz de la política.
 
-### Lectura y recomendación
-
-Recomiendo arrancar con **B — Base**. El argumento central es que la distribución de averías está muy concentrada: un 20 % de los casos (≥ $250) concentra cerca del 88 % del costo. B pone la revisión gerencial (N2) justo donde está el dinero y deja que el 80 % de los casos se resuelva con N1 más la valorización.
-
-- **A — Control** sube la cobertura de N2 del 88 % al 95 % del costo, pero casi duplica los casos N2 (de 288 a 504 al mes) y le manda entre 2 y 4 casos diarios a N4. A ese volumen la aprobación regional se vuelve un sello sin revisión real y se convierte en el cuello de botella del SLA. Ese 7 % adicional de costo se controla mejor con analítica que con firmas.
-- **C — Ágil** reduce las horas de aprobación apenas un 17 % frente a B, pero deja sin revisión de N3 el 43 % del costo. El ahorro de tiempo es chico frente al hueco de control.
-- **El riesgo de B** está en el tramo $100–$250 (15 % de los casos, ~6 % del costo), que solo ve N1. Lo cubren el anti-fraccionamiento, el umbral acumulado mensual por ubicación (`UmbralAcumuladoTiendaMesUSD = 3 000`, que avisa a N3) y el indicador de concentración por reportante en Power BI.
-- **Sensibilidad al volumen:** si el volumen real se parece al alto, B sigue siendo manejable para N3 (1.5 casos por país por día). La alerta es N4: con más de 2 casos diarios hay que subir N4 a ≥ $10 000 y dejar el resto de B igual.
-
-### Señales para recalibrar (revisar al mes 3)
+### Señales para revisar (al mes 3 del piloto)
 
 | Señal en Power BI | Acción |
 |---|---|
-| N4 recibe más de 2 casos por día hábil durante 4 semanas | Subir N4 a $10 000 |
-| Mediana de aprobación de N2 o N3 > 24 h | Revisar primero los aprobadores (suplentes, carga); si el problema es estructural, subir el umbral de ese nivel un escalón |
-| Casos en $200–$249 por encima de 1.5 veces los de $250–$299 (amontonamiento bajo el umbral) | Señal de fraccionamiento o de cantidades ajustadas: auditar esas ubicaciones y bajar N2 a $200 en el país afectado |
-| % de rechazo en N2 o N3 < 2 % sostenido | Ese nivel no está agregando control; evaluar subir su umbral |
-| % de rechazo en N1 > 10 % en una ubicación | Problema de capacitación del reportante, no de umbral |
+| CI recibe > 6 casos N3 por día hábil durante 4 semanas | Asignar un analista dedicado y ajustar la recurrencia (`RecTienda_Alfa`, `RecTienda_MontoUSD`) |
+| Mediana de aprobación de Operaciones local > 24 h | Suplente formal o división por zona (`Cfg_Aprobadores` por ubicación) |
+| Amontonamiento de casos con unitario de USD 90–100 (> 1.5 veces los de USD 100–110) | Posible ajuste de precios para quedar en N1: auditoría de CI a esas tiendas |
+| % de rechazo en N2 < 2 % sostenido | El nivel no está agregando control: llevarlo a la revisión de la política (2027-05) |
+| Casos de la matriz CD > USD 3 000 frecuentes | Proponer en la revisión de la política un nivel superior para el CD (D6) |
 
-### Recalibración con datos reales
+## 5. Parámetros
 
-Con 3 meses de casos valorizados, en Power BI se arma el histograma de `CostoTotalUSD` con los mismos cortes de la tabla de supuestos. Se reemplaza la distribución supuesta por la real y se recalculan los casos y horas por escenario: casos de Nx = casos con costo ≥ umbral de Nx; horas = Σ casos de cada nivel × minutos del nivel ÷ 60. La medida `[Simulacion casos N2]` del archivo DAX lo hace con un parámetro "qué pasaría si".
-
-## SLA
-
-| Tramo | Rango USD | Niveles | SLA de aprobación por nivel | SLA de cierre (desde el envío) |
-|---|---|---|---|---|
-| T1 | 0 – 249.99 | N1 | 24 h | 7 días |
-| T2 | 250 – 999.99 | N1, N2 | 24 h | 10 días |
-| T3 | 1 000 – 4 999.99 | N1, N2, N3 | 24 h | 15 días |
-| T4 | ≥ 5 000 | N1 a N4 | 24 h | 20 días |
-
-Además: la valorización tiene un SLA de 24 h y el ajuste en Infor, de 3 días desde la aprobación final.
-
-- **Cierre** = aprobado + ajuste registrado en Infor (`NumeroAjusteInfor`) + evidencia de la disposición ejecutada (acta de destrucción, guía de RTV, N.º de reclamo o factura outlet). **El cobro del reclamo no forma parte del cierre:** un proveedor puede tardar meses en pagar, y meterlo en el cierre ensucia el SLA operativo. La recuperación se mide aparte con `MontoRecuperadoUSD`.
-- Los SLA corren en **horas calendario**, no hábiles. Calcular horas hábiles con feriados de 6 países en Power Automate es frágil y caro en acciones; 24 h calendario con escalamiento a las 48 h es un compromiso razonable. Si los fines de semana distorsionan el indicador, Power BI puede reportar además una versión en días hábiles usando la tabla de fechas.
+| Lista | Qué se configura |
+|---|---|
+| `Cfg_Matriz` | Niveles, rangos unitarios, rol aprobador, SLA de aprobación y de cierre por nivel. Los cambios se versionan (`Version`, `VigenteDesde`, `VigenteHasta`); **los montos cambian solo si cambia la política** |
+| `Cfg_Parametros` | D1 (`CasoMaxSinNivel3USD`), D6, SLA del procedimiento, recordatorios y escalamiento, y todos los parámetros de recurrencia |
+| `Cfg_Aprobadores` | Persona y suplente por rol, país y ubicación |
+| `Cfg_TablaPoisson` | k por λ para la recurrencia (fija) |
+| `Cat_Ubicacion` | `FactorTamano` y `KRecurrenciaTienda`, actualizados cada trimestre |

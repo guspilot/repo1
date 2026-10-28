@@ -81,12 +81,13 @@ def generar(seed):
         u = mult * S["costo_mediana"] * math.exp(r.gauss(0, S["costo_sigma"]))
         x = r.random()
         q = 1 if x < .80 else (r.randint(2, 5) if x < .95 else r.randint(6, 20))
-        return round(u * q, 2)
+        return round(u, 2), q
 
     def nuevo(d, ubic, sku, resp, origen):
         mult = S["mult_costo_tienda_monto"] if (ubic in monto and d >= S["inicio_tienda_problema"]) else 1.0
+        unit, q = costo(mult)
         casos.append(dict(dia=d, ubic=ubic, sku=sku, prov=prov_de_sku[sku], resp=resp,
-                          usd=costo(mult), origen=origen))
+                          unit=unit, qty=q, usd=round(unit * q, 2), origen=origen))
 
     for d in range(total):
         for i in range(n):

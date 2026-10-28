@@ -1,46 +1,57 @@
 # Workflow de averías — Unicomer ULA
 
-Workflow para reportar, aprobar y cerrar averías en 6 países, con 1 CD por país y unas 100 tiendas cada uno.
+Es el procedimiento digital de la **Política de Averías POL-CO-0031 v2.0** para 6 países, con 1 CD por país y unas 100 tiendas en cada uno.
 
-El stack es SharePoint (lista `Averías`), Power Apps para la captura móvil, Power Automate para la aprobación y las notificaciones, y Power BI para la medición. Todo funciona con licencias M365 y conectores estándar, sin permisos de TI. **Power Apps no ajusta inventario:** el ajuste se sigue haciendo en Infor y la lista solo guarda el N.º de ajuste como evidencia para cerrar.
+El stack es SharePoint (listas `Averías` y `Averías_Lineas`), Power Apps para la captura móvil, Power Automate para la aprobación, la disposición y las notificaciones, y Power BI para los KPIs de la política. Todo funciona con licencias M365 y conectores estándar, **sin permisos de TI**. **Power Apps no ajusta inventario:** los movimientos se siguen registrando en Infor, y el workflow solo guarda el número como evidencia para cerrar.
 
 ## Entregables
 
 | # | Archivo | Contenido |
 |---|---|---|
-| 0 | [`00_contexto_politica.md`](00_contexto_politica.md) | **Política POL-CO-0031 v2.0**: reglas obligatorias, brechas del diseño actual y decisiones abiertas (D1–D8). **Leer primero: los documentos 01–05 todavía no están alineados con la política.** |
-| 1 | [`01_esquema_lista.md`](01_esquema_lista.md) | Columnas, tipos, validaciones, índices, máquina de estados y listas de soporte |
-| 2 | [`catalogos/`](catalogos) | `tipo_averia.csv`, `causa.csv`, `ubicacion.csv` |
-| 3 | [`03_reglas_aprobacion.md`](03_reglas_aprobacion.md) + [`config/`](config) | Umbrales por costo, escenarios A/B/C, SLA, anti-fraccionamiento, segregación y parámetros editables |
-| 4 | [`04_medidas_dax.md`](04_medidas_dax.md) | Power Query, modelo, medidas DAX y RLS por país |
-| 5 | [`05_flujo_power_automate.md`](05_flujo_power_automate.md) | Flujos AV-01 a AV-04 paso a paso, con expresiones y casos de prueba |
+| 0 | [`00_contexto_politica.md`](00_contexto_politica.md) | Resumen de la política, cambios aplicados, huecos D1–D8 con la decisión del procedimiento y la regla de recurrencia (D2) |
+| 1 | [`01_esquema_lista.md`](01_esquema_lista.md) | Encabezado + líneas, columnas, validaciones, índices, máquina de estados y listas de soporte |
+| 2 | [`catalogos/`](catalogos) | `tipo_averia.csv` (los 6 tipos oficiales), `subtipo.csv`, `causa.csv` (por origen) y `ubicacion.csv` |
+| 3 | [`03_reglas_aprobacion.md`](03_reglas_aprobacion.md) + [`config/`](config) | Matriz 7.3 aplicada, autorización de la disposición, SLA, escenarios de carga por aprobador y parámetros |
+| 4 | [`04_medidas_dax.md`](04_medidas_dax.md) | Modelo de Power BI, **todos los KPIs de la sección 9**, control del procedimiento y RLS |
+| 5 | [`05_flujo_power_automate.md`](05_flujo_power_automate.md) | Flujos AV-01 a AV-05 paso a paso y 20 casos de prueba |
+| — | [`simulacion/`](simulacion) | Simulacro de la recurrencia ([`RESULTADOS.md`](simulacion/RESULTADOS.md)) y de la carga por aprobador (`carga_matriz.py`) |
 
-Los CSV están en UTF-8 con BOM para que Excel muestre bien las tildes, y sirven para **Nueva lista → Desde CSV** en SharePoint.
+Los CSV están en UTF-8 con BOM, para que Excel muestre bien las tildes, y sirven para **Nueva lista → Desde CSV**.
 
-## Decisiones de diseño (y por qué)
+## Flujo en una línea
 
-1. **El reportante no digita el costo.** El costo sale de Infor y lo carga Control de Inventarios en el paso de valorización, después de N1. El tramo de aprobación depende del costo, así que si lo digita quien reporta el control se puede burlar. Además, Control de Inventarios es quien después registra el ajuste, de modo que valorizar no le suma un rol nuevo.
-2. **El umbral se calcula sobre el costo bruto en USD** y sobre el acumulado de 7 días del mismo SKU en la misma ubicación (anti-fraccionamiento). El valor recuperable no cuenta para el umbral.
-3. **Todas las averías pasan por N1; no hay autoaprobación.** El control de los montos chicos lo hace Power BI con análisis de concentración, no más firmas.
-4. **Umbrales: escenario B** (N2 ≥ $250, N3 ≥ $1 000, N4 ≥ $5 000). Según los supuestos de [`03_reglas_aprobacion.md`](03_reglas_aprobacion.md), cubre ~88 % del costo con N2 revisando ~20 % de los casos. Se recalibra al mes 3 con datos reales.
-5. **El cierre no espera el cobro del reclamo.** Cierre = ajuste en Infor + evidencia de la disposición. La recuperación se mide aparte.
-6. **El KPI principal de cierre es `% cumplimiento SLA cierre` (por cohorte de vencimiento)**, no `% cerrado a tiempo`, porque el segundo mejora cuando no se cierra nada.
-7. **Una sola lista regional** con `PaisCodigo`. No se usan permisos por ítem; la app filtra por país y Power BI aplica RLS. Es una limitación aceptada.
+Reporte (≤ 24 h) → valorización CI (costo y retail de Infor) → nivel según la matriz y la recurrencia → aprobación (≤ 48 h, un aprobador) → diagnóstico ST si aplica → disposición autorizada por su dueño (Gerente de Producto 72 h, CI o Compras) → movimiento Infor + evidencia → cierre.
+
+## Decisiones de diseño
+
+1. **El costo lo carga CI desde Infor, no el reportante.** La matriz depende del costo unitario, y si lo digitara quien reporta podría elegir quién le aprueba. Quien valoriza no puede aprobar el N3.
+2. **Matriz de la política con tres precisiones del procedimiento:**
+   - El caso de más de USD 3 000 va a N3 [D1].
+   - El unitario de referencia es el máximo de las líneas [D3].
+   - Bodega externa y 3PL usan la matriz del CD; la última milla usa la de la tienda vendedora [D7].
+3. **Recurrencia relativa, no con umbrales fijos** [D2]: cada SKU y cada proveedor se comparan contra su propia historia, y la tienda contra lo esperado para su tamaño. Con umbrales fijos, el simulacro mandaba a CI el 49 % de los casos; con la regla relativa, ~1.7 casos por día por país, y detecta todas las anomalías plantadas.
+4. **La disposición física y la recuperación van por separado:** un mismo caso puede ir a outlet **y** cobrarse al transportista a precio retail.
+5. **El cierre no espera el cobro.** Cierre = movimiento Infor + evidencia de la disposición. La recuperación se mide aparte.
+6. **Todo dentro del ticket** [8.2.4–8.2.5]: Teams solo notifica; las decisiones quedan en Approvals o en la app, con bitácora e historial.
+7. **Una sola lista regional** con `PaisCodigo`. La app filtra por país y Power BI aplica RLS.
 
 ## Prerrequisitos que hay que confirmar antes de construir
 
-- [ ] **Licencias del personal de tienda y CD.** Cada reportante necesita una cuenta M365 con acceso a SharePoint y Power Apps para M365. Si el personal de tienda no tiene cuenta, el reportante pasa a ser el jefe de tienda y cambia el diseño de N1.
-- [ ] **Power BI Pro** para quien publica y para los gerentes de país que consumen.
-- [ ] **Sitio de SharePoint** del que Logística regional sea propietaria.
-- [ ] **El país 6:** figura como `P6` en los catálogos; hay que confirmar el código, la moneda y la zona horaria.
-- [ ] **El maestro de tiendas de Infor** (código, nombre, CD abastecedor y código Infor), para reemplazar las filas de ejemplo de `ubicacion.csv`.
-- [ ] **Los motivos de ajuste de Infor por disposición** (tabla en `05_flujo_power_automate.md`), definidos por Control de Inventarios de cada país.
-- [ ] **Aprobadores y suplentes por rol, país y ubicación** (`config/aprobadores_plantilla.csv`).
+- [ ] **Licencias M365 del personal de tienda, CD y ST.** Sin cuenta no pueden reportar ni diagnosticar en la app.
+- [ ] **Power BI Pro** para quien publica el tablero y para quienes lo consumen.
+- [ ] **Sitio de SharePoint** del que Logística regional sea propietaria, con la biblioteca `BI_Externos`.
+- [ ] **El país 6** (`P6`): código, moneda y zona horaria.
+- [ ] **Maestro de tiendas de Infor** con el `FactorTamano` (ventas de los últimos 3 meses de cada tienda ÷ el promedio del país).
+- [ ] **Códigos de motivo de movimiento Infor** por disposición, definidos por CI de cada país.
+- [ ] **Aprobadores y suplentes** por rol: Gerente de Tienda, Operaciones local, Gerente de Logística CD, CI valorizador, CI aprobador, Gerente de Producto, Compras, Finanzas y Seguros, ST.
+- [ ] **Capacidad de CI:** en el escenario base, ~40 min/día de valorización + 3.5 casos N3/día por país. Con volumen alto puede llegar a 13 casos/día, y entonces hace falta un analista dedicado (ver 03 §4).
+- [ ] **Exportes mensuales a `BI_Externos`:** ventas netas, inventario promedio y recepciones por proveedor.
 
 ## Orden de implementación sugerido
 
-1. Crear el sitio, las listas de soporte desde los CSV y la lista `Averías`, con los nombres internos primero y los índices antes de cargar datos.
-2. Construir AV-01 a AV-03 en una lista de prueba y correr los casos de prueba del documento 05.
-3. Hacer la app de Power Apps con cuatro pantallas: Reportar, Mis averías, Aprobar/Valorizar y Cerrar (ajuste Infor). La app no forma parte de este paquete.
-4. Hacer un piloto en un país (1 CD + 10 tiendas) durante 4 semanas, con AV-04 y el tablero de Power BI.
-5. Hacer el despliegue regional y recalibrar los umbrales al mes 3 con la simulación del documento 04.
+1. Crear el sitio, las listas de soporte desde los CSV y las listas `Averías` y `Averías_Lineas`, con los nombres internos primero y los índices antes de cargar datos.
+2. Construir AV-01 a AV-04 en una lista de prueba y correr los 20 casos de prueba del documento 05.
+3. Construir la app con estas pantallas: Reportar, Mis averías, Valorizar (CI), Aprobar, Diagnóstico (ST), Disposición, Autorizar descuento (Gerente de Producto) y Cerrar (CI). La app no forma parte de este paquete.
+4. Hacer el piloto en un país (1 CD + 10 tiendas) durante 4 semanas, con `RecurrenciaModo = Observar`, AV-05 y el tablero.
+5. Correr el simulacro con los datos reales del piloto, pasar a `Aplicar` y hacer el despliegue regional.
+6. Recalibrar al mes 3: λ del país, `FactorTamano` y las señales del documento 03 §4.

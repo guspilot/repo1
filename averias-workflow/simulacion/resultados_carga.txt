@@ -1,0 +1,8 @@
+| Escenario | Casos/mes | Gerente de Tienda (N1) | Operaciones local (N2) | CI (tienda N3) | Gerente Logística CD | CI (CD > 100/u, recurrencia o caso > 3 000) | CI total/día hábil | % CI por recurrencia |
+|---|---|---|---|---|---|---|---|---|
+| 2 casos/tienda/mes · unitario mediano USD 100 | 258 | 4.3 | 4.0 | 1.5 | 0.9 | 1.1 | 2.6 | 44 % |
+| 2 casos/tienda/mes · unitario mediano USD 150 | 258 | 2.9 | 4.7 | 2.2 | 0.6 | 1.3 | 3.5 | 37 % |
+| 2 casos/tienda/mes · unitario mediano USD 250 | 258 | 1.4 | 4.8 | 3.6 | 0.3 | 1.6 | 5.2 | 30 % |
+| 4 casos/tienda/mes · unitario mediano USD 100 | 505 | 8.0 | 7.3 | 3.9 | 1.8 | 2.0 | 5.9 | 53 % |
+| 4 casos/tienda/mes · unitario mediano USD 150 | 505 | 5.0 | 8.1 | 6.1 | 1.2 | 2.5 | 8.6 | 50 % |
+| 4 casos/tienda/mes · unitario mediano USD 250 | 505 | 2.2 | 6.9 | 10.1 | 0.6 | 3.1 | 13.3 | 46 % |
