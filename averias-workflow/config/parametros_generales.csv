@@ -1,0 +1,8 @@
+﻿Clave,Valor,Descripcion
+VentanaFraccionamientoDias,7,Días hacia atrás para sumar averías del mismo SKU en la misma ubicación (anti-fraccionamiento)
+HorasRecordatorio,24,Horas sin respuesta antes de recordatorio por Teams al aprobador
+HorasEscalamientoSuplente,48,Horas sin respuesta antes de reasignar la aprobación al suplente
+SLAValorizacionHoras,24,Horas para que Control de Inventarios valorice con costo Infor
+SLAAjusteInforDias,3,Días desde aprobación final hasta registrar el número de ajuste Infor
+UmbralAcumuladoTiendaMesUSD,3000,Acumulado mensual por ubicación que dispara aviso al Gerente de logística país
+MaxDiasDeteccionAReporte,3,Días máximos entre detección y reporte; si se excede se marca ReporteTardio

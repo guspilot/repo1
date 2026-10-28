@@ -1,0 +1,8 @@
+﻿PaisCodigo,UbicacionCodigo,Rol,AprobadorEmail,SuplenteEmail,Activo
+SV,*,Control de inventarios,COMPLETAR@unicomer.com,COMPLETAR@unicomer.com,Sí
+SV,SV-CD01,Jefe de ubicación,COMPLETAR@unicomer.com,COMPLETAR@unicomer.com,Sí
+SV,SV-T001,Jefe de ubicación,COMPLETAR@unicomer.com,COMPLETAR@unicomer.com,Sí
+SV,SV-CD01,Gerente de operación,COMPLETAR@unicomer.com,COMPLETAR@unicomer.com,Sí
+SV,*,Gerente de operación,COMPLETAR@unicomer.com,COMPLETAR@unicomer.com,Sí
+SV,*,Gerente de logística país,COMPLETAR@unicomer.com,COMPLETAR@unicomer.com,Sí
+*,*,Gerente de logística regional,COMPLETAR@unicomer.com,COMPLETAR@unicomer.com,Sí

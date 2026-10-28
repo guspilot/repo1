@@ -1,0 +1,15 @@
+﻿Codigo,Nombre,Categoria,RequiereFoto,FotosMinimas,RequiereDiagnosticoTecnico,DisposicionSugerida,Activo,Orden
+TA01,Golpe / abolladura,Física,Sí,2,No,Venta outlet,Sí,10
+TA02,Rayón / raspón en acabado,Física,Sí,2,No,Venta outlet,Sí,20
+TA03,Quebrado / roto (pantalla vidrio pieza),Física,Sí,2,No,Destrucción,Sí,30
+TA04,Deformado / torcido (estructura),Física,Sí,2,No,Reparación / reacondicionamiento,Sí,40
+TA05,Empaque dañado (producto íntegro),Empaque,Sí,1,No,Venta como nuevo con reempaque,Sí,50
+TA06,Empaque abierto / sellos rotos,Empaque,Sí,1,Sí,Reparación / reacondicionamiento,Sí,60
+TA07,Humedad / agua,Contaminación,Sí,2,Sí,Destrucción,Sí,70
+TA08,Manchado / sucio (muebles colchones textiles),Contaminación,Sí,2,No,Venta outlet,Sí,80
+TA09,Plaga / contaminación biológica,Contaminación,Sí,2,No,Destrucción,Sí,90
+TA10,No enciende / falla funcional (DOA),Funcional,Sí,1,Sí,Devolución a proveedor (RTV) / garantía,Sí,100
+TA11,Faltante de piezas / accesorios / manuales,Faltante,Sí,1,No,Reclamo a proveedor,Sí,110
+TA12,Producto incompleto en bulto (faltan cajas del set),Faltante,Sí,1,No,Reclamo a proveedor,Sí,120
+TA13,Daño por fuego / calor,Siniestro,Sí,2,No,Reclamo a aseguradora,Sí,130
+TA99,Otro (describir),Otro,Sí,2,No,Por determinar,Sí,990

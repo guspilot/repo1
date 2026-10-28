@@ -1,0 +1,20 @@
+﻿Codigo,Nombre,EtapaTipica,ResponsableDefault,AplicaReclamo,DisposicionSugerida,Activo,Orden
+CA01,Mal estibado / sobrepeso en contenedor de origen,Recepción proveedor,Proveedor,Sí,Reclamo a proveedor,Sí,10
+CA02,Empaque de origen insuficiente,Recepción proveedor,Proveedor,Sí,Reclamo a proveedor,Sí,20
+CA03,Defecto de fábrica,Recepción proveedor,Proveedor,Sí,Devolución a proveedor (RTV) / garantía,Sí,30
+CA04,Daño en transporte internacional / naviera / agente,Recepción proveedor,Transportista,Sí,Reclamo a transportista,Sí,40
+CA05,Manipulación en descarga (CD),Recepción proveedor,Operación CD,No,Venta outlet,Sí,50
+CA06,Montacargas / equipo de manejo (CD),Almacenamiento CD,Operación CD,No,Venta outlet,Sí,60
+CA07,Sobre-estiba / altura de apilamiento excedida,Almacenamiento CD,Operación CD,No,Venta outlet,Sí,70
+CA08,Infraestructura (goteras / rack / piso),Almacenamiento CD,Operación CD,No,Por determinar,Sí,80
+CA09,Picking / manipulación en preparación,Picking / despacho CD,Operación CD,No,Venta outlet,Sí,90
+CA10,Mala carga / estiba en camión de despacho,Picking / despacho CD,Operación CD,No,Venta outlet,Sí,100
+CA11,Daño en ruta CD→tienda (flota o transportista),Transporte CD→tienda,Transportista,Sí,Reclamo a transportista,Sí,110
+CA12,Manipulación en descarga / bodega de tienda,Recepción tienda,Tienda,No,Venta outlet,Sí,120
+CA13,Exhibición en piso de venta,Exhibición / bodega tienda,Tienda,No,Venta outlet,Sí,130
+CA14,Manipulación de cliente en tienda,Exhibición / bodega tienda,Tienda,No,Venta outlet,Sí,140
+CA15,Entrega última milla / instalación,Entrega a cliente (last-mile),Transportista,Sí,Reclamo a transportista,Sí,150
+CA16,Devolución de cliente con daño,Devolución de cliente,Cliente,No,Por determinar,Sí,160
+CA17,Siniestro (lluvia inundación incendio sismo),Cualquiera,Aseguradora,Sí,Reclamo a aseguradora,Sí,170
+CA98,Origen no identificado (detectado en inventario),Cualquiera,Por determinar,No,Por determinar,Sí,980
+CA99,Por determinar (requiere investigación),Cualquiera,Por determinar,No,Por determinar,Sí,990

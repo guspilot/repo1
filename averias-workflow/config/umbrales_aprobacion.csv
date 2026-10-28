@@ -1,0 +1,5 @@
+﻿Version,PaisCodigo,Nivel,MontoDesdeUSD,MontoHastaUSD,NivelesRequeridos,RolN1,RolN2,RolN3,RolN4,SLAAprobacionHorasPorNivel,SLACierreDias,VigenteDesde,VigenteHasta,Activo
+B-2026.1,*,T1,0,249.99,1,Jefe de ubicación,,,,24,7,2026-11-01,,Sí
+B-2026.1,*,T2,250,999.99,2,Jefe de ubicación,Gerente de operación,,,24,10,2026-11-01,,Sí
+B-2026.1,*,T3,1000,4999.99,3,Jefe de ubicación,Gerente de operación,Gerente de logística país,,24,15,2026-11-01,,Sí
+B-2026.1,*,T4,5000,999999999,4,Jefe de ubicación,Gerente de operación,Gerente de logística país,Gerente de logística regional,24,20,2026-11-01,,Sí

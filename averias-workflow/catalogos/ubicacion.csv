@@ -1,0 +1,26 @@
+﻿Codigo,Nombre,Tipo,PaisCodigo,CDAbastecedor,CodigoInfor,Moneda,Activo,EsEjemplo
+SV-CD01,CD El Salvador,CD,SV,SV-CD01,COMPLETAR,USD,Sí,No
+GT-CD01,CD Guatemala,CD,GT,GT-CD01,COMPLETAR,GTQ,Sí,No
+HN-CD01,CD Honduras,CD,HN,HN-CD01,COMPLETAR,HNL,Sí,No
+NI-CD01,CD Nicaragua,CD,NI,NI-CD01,COMPLETAR,NIO,Sí,No
+CR-CD01,CD Costa Rica,CD,CR,CR-CD01,COMPLETAR,CRC,Sí,No
+P6-CD01,CD País 6 (confirmar),CD,P6,P6-CD01,COMPLETAR,COMPLETAR,Sí,No
+SV-TR01,En tránsito CD→tiendas SV,Tránsito,SV,SV-CD01,COMPLETAR,USD,Sí,No
+GT-TR01,En tránsito CD→tiendas GT,Tránsito,GT,GT-CD01,COMPLETAR,GTQ,Sí,No
+HN-TR01,En tránsito CD→tiendas HN,Tránsito,HN,HN-CD01,COMPLETAR,HNL,Sí,No
+NI-TR01,En tránsito CD→tiendas NI,Tránsito,NI,NI-CD01,COMPLETAR,NIO,Sí,No
+CR-TR01,En tránsito CD→tiendas CR,Tránsito,CR,CR-CD01,COMPLETAR,CRC,Sí,No
+P6-TR01,En tránsito CD→tiendas P6,Tránsito,P6,P6-CD01,COMPLETAR,COMPLETAR,Sí,No
+SV-LM01,Última milla SV (entrega a cliente),Última milla,SV,SV-CD01,COMPLETAR,USD,Sí,No
+GT-LM01,Última milla GT (entrega a cliente),Última milla,GT,GT-CD01,COMPLETAR,GTQ,Sí,No
+HN-LM01,Última milla HN (entrega a cliente),Última milla,HN,HN-CD01,COMPLETAR,HNL,Sí,No
+NI-LM01,Última milla NI (entrega a cliente),Última milla,NI,NI-CD01,COMPLETAR,NIO,Sí,No
+CR-LM01,Última milla CR (entrega a cliente),Última milla,CR,CR-CD01,COMPLETAR,CRC,Sí,No
+P6-LM01,Última milla P6 (entrega a cliente),Última milla,P6,P6-CD01,COMPLETAR,COMPLETAR,Sí,No
+SV-T001,EJEMPLO — reemplazar con maestro de tiendas Infor,Tienda,SV,SV-CD01,COMPLETAR,USD,Sí,Sí
+SV-T002,EJEMPLO — reemplazar con maestro de tiendas Infor,Tienda,SV,SV-CD01,COMPLETAR,USD,Sí,Sí
+GT-T001,EJEMPLO — reemplazar con maestro de tiendas Infor,Tienda,GT,GT-CD01,COMPLETAR,GTQ,Sí,Sí
+HN-T001,EJEMPLO — reemplazar con maestro de tiendas Infor,Tienda,HN,HN-CD01,COMPLETAR,HNL,Sí,Sí
+NI-T001,EJEMPLO — reemplazar con maestro de tiendas Infor,Tienda,NI,NI-CD01,COMPLETAR,NIO,Sí,Sí
+CR-T001,EJEMPLO — reemplazar con maestro de tiendas Infor,Tienda,CR,CR-CD01,COMPLETAR,CRC,Sí,Sí
+P6-T001,EJEMPLO — reemplazar con maestro de tiendas Infor,Tienda,P6,P6-CD01,COMPLETAR,COMPLETAR,Sí,Sí
