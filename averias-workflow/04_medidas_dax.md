@@ -324,21 +324,18 @@ VAR Encima = CALCULATE ( [Averias validas], Averias[CostoTotalUSD] >= U, Averias
 RETURN
     DIVIDE ( Debajo, Encima )
 
--- k para la regla R3a de recurrencia por tienda (ver 00_contexto_politica.md, D2).
--- Usar con un país filtrado y los últimos 90 días; el resultado se copia a RecTienda_MinCasos cada trimestre.
-k sugerido recurrencia tienda =
+-- λ del país para R3a (ver 00_contexto_politica.md, D2): casos por tienda en 30 días.
+-- Usar con un país filtrado y los últimos 90 días; se copia a LambdaPaisTienda30d cada trimestre.
+-- El k de cada tienda sale de Cfg_TablaPoisson (columna K_alfa_1_0) con λ × FactorTamano.
+Lambda pais tienda 30d =
 VAR Tiendas =
     CALCULATE ( DISTINCTCOUNT ( Cat_Ubicacion[Title] ), Cat_Ubicacion[Tipo] = "Tienda", Cat_Ubicacion[Activo] = TRUE () )
 VAR Dias =
     DATEDIFF ( MIN ( Calendario[Fecha] ), MAX ( Calendario[Fecha] ), DAY ) + 1
 VAR Casos =
     CALCULATE ( [Averias validas], Cat_Ubicacion[Tipo] = "Tienda" )
-VAR Lambda =
-    DIVIDE ( Casos, Tiendas ) * 30 / Dias
-VAR Candidatos =
-    FILTER ( GENERATESERIES ( 1, 60, 1 ), 1 - POISSON.DIST ( [Value] - 1, Lambda, TRUE () ) <= 0.025 )
 RETURN
-    MINX ( Candidatos, [Value] )
+    DIVIDE ( Casos, Tiendas ) * 30 / Dias
 
 % rechazo =
 DIVIDE ( CALCULATE ( [Averias], Averias[Estado] = "Rechazado" ), [Averias enviadas] )
