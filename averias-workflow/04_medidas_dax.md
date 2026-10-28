@@ -324,6 +324,22 @@ VAR Encima = CALCULATE ( [Averias validas], Averias[CostoTotalUSD] >= U, Averias
 RETURN
     DIVIDE ( Debajo, Encima )
 
+-- k para la regla R3a de recurrencia por tienda (ver 00_contexto_politica.md, D2).
+-- Usar con un país filtrado y los últimos 90 días; el resultado se copia a RecTienda_MinCasos cada trimestre.
+k sugerido recurrencia tienda =
+VAR Tiendas =
+    CALCULATE ( DISTINCTCOUNT ( Cat_Ubicacion[Title] ), Cat_Ubicacion[Tipo] = "Tienda", Cat_Ubicacion[Activo] = TRUE () )
+VAR Dias =
+    DATEDIFF ( MIN ( Calendario[Fecha] ), MAX ( Calendario[Fecha] ), DAY ) + 1
+VAR Casos =
+    CALCULATE ( [Averias validas], Cat_Ubicacion[Tipo] = "Tienda" )
+VAR Lambda =
+    DIVIDE ( Casos, Tiendas ) * 30 / Dias
+VAR Candidatos =
+    FILTER ( GENERATESERIES ( 1, 60, 1 ), 1 - POISSON.DIST ( [Value] - 1, Lambda, TRUE () ) <= 0.025 )
+RETURN
+    MINX ( Candidatos, [Value] )
+
 % rechazo =
 DIVIDE ( CALCULATE ( [Averias], Averias[Estado] = "Rechazado" ), [Averias enviadas] )
 ```

@@ -117,7 +117,7 @@ Como sos el autor de la política, estas decisiones son tuyas. Para cada una dej
 | # | Hueco | Riesgo | Recomendación para el procedimiento |
 |---|---|---|---|
 | **D1** | Tienda: si el costo unitario es ≤ 100 pero el caso pasa de 3 000 (p. ej. 40 u × USD 90 = USD 3 600), ¿qué nivel corresponde? El nivel 2 dice "hasta USD 3 000 por caso", pero nada lleva un caso grande a nivel 3 | Un gerente de tienda aprueba solo pérdidas de miles de dólares si son muchas unidades baratas | Nivel = **el mayor** entre el nivel por unitario y el nivel por caso. Caso ≤ 3 000 y unitario ≤ 100 → N1; caso > 3 000 → N3 |
-| **D2** | "Recurrencia del mismo SKU, proveedor **o tienda** en 30–60 días" sin un umbral de cantidad. Con ~100 tiendas que reportan varias averías al mes, casi **todo** caso de tienda sería "recurrente" | Control de Inventarios recibe prácticamente todo el volumen y se vuelve el cuello de botella. El 48 h se incumple desde el día 1 | Recurrencia = **≥ 3 incidentes** del mismo SKU + proveedor, o **≥ N casos o USD X** de la misma tienda, en **60 días**. Que sean parámetros en `Cfg_Parametros` y se calibren con el piloto |
+| **D2** | "Recurrencia del mismo SKU, proveedor **o tienda** en 30–60 días" sin un umbral de cantidad. Con ~100 tiendas que reportan varias averías al mes, casi **todo** caso de tienda sería "recurrente" | Control de Inventarios recibe prácticamente todo el volumen y se vuelve el cuello de botella. El 48 h se incumple desde el día 1 | **Propuesta cerrada:** ver la sección "Regla de recurrencia (D2)" más abajo |
 | **D3** | "Costo unitario" cuando el caso tiene varias líneas o SKU | Ambigüedad sobre qué unitario usar | Usar el **máximo** costo unitario de las líneas del caso |
 | **D4** | Número de serie obligatorio para todo, cuando muebles y colchones no tienen | El reportante inventa un valor o abandona el reporte | Permitir `SIN SERIE` solo para las categorías sin serie (lista en el catálogo de subtipos) |
 | **D5** | 8.2.2 remite a la matriz en la "sección 7.1" (está en 7.3), y 8.2.3 repite 8.2.2 pero solo nombra al gerente de CD o tienda como aprobadores | Contradicción en una auditoría | Corregir en la próxima revisión: 8.2.2 → 7.3 y eliminar 8.2.3 |
@@ -126,6 +126,63 @@ Como sos el autor de la política, estas decisiones son tuyas. Para cada una dej
 | **D8** | ¿Un caso es una línea o un lote? La política habla de "caso o lote consolidado" | Define el monto del criterio de USD 3 000 | Ticket = **1 evento con N líneas** (SKU, cantidad, serie). El monto del caso = Σ líneas. Implica separar la lista en dos: `Averias` (encabezado) y `Averias_Lineas` |
 
 > D8 cambia el modelo de datos: hoy cada ítem es un solo SKU. En tu presentación `workflow_averias_v2_ES.pptx` (OneDrive, mayo de 2026) ya planteabas "1 evento · N líneas · SKU · origen", que es consistente con esta recomendación.
+
+## Regla de recurrencia (D2) — propuesta
+
+### Principio
+
+Las tres recurrencias que nombra la política detectan problemas distintos, así que cada una lleva su propio criterio:
+
+| Dimensión | Qué problema detecta | Quién lo corrige |
+|---|---|---|
+| Mismo **SKU + proveedor** | Defecto de producto o empaque | Compras / proveedor |
+| Mismo **proveedor** | Calidad o embalaje del proveedor | Compras |
+| Misma **tienda** | Mala manipulación, exhibición o avería usada para tapar faltantes | Operaciones / CI |
+
+Un umbral único de conteo no sirve. Con ~2 averías por tienda al mes, "2 casos en 30 días" marca a casi todas las tiendas, y CI recibe todo el volumen.
+
+### Reglas
+
+Se evalúan en AV-02, después de la valorización (ahí ya están el proveedor y el costo de Infor), contando **casos** (no unidades) del **mismo país**. Se incluye el caso actual y se excluyen los rechazados y anulados. Si se cumple **cualquiera** de las tres, el caso va a nivel 3 (Control de Inventarios) y queda marcado `Recurrencia = SKU / Proveedor / Tienda` para que CI sepa por qué le llegó.
+
+| Regla | Criterio por defecto | Ventana | Racional |
+|---|---|---|---|
+| **R1 — SKU + proveedor** | ≥ **3** casos del mismo SKU y proveedor, en cualquier ubicación del país | **60 días** | Es la misma definición del KPI "Recurrencia por SKU" de la política (9.2), así que el control y el indicador miden lo mismo. Uno es un incidente, dos puede ser coincidencia, tres en distintas ubicaciones ya es un patrón. 60 días es el extremo de la ventana de la política y cubre al menos dos recepciones de un proveedor con reposición mensual |
+| **R2 — Proveedor** | ≥ **5** casos con responsable **Proveedor local o importado**, de cualquier SKU del mismo proveedor | **60 días** | Solo cuenta lo imputado al proveedor. Si contara todo, Samsung o LG serían "recurrentes" siempre, por puro volumen, aunque el daño fuera del CD. El 5 es más alto que en R1 porque abarca todo el catálogo del proveedor |
+| **R3a — Tienda, frecuencia** | Casos de la tienda en la ventana ≥ **k del país** (tabla abajo) | **30 días** | k es el valor que una tienda "promedio" alcanzaría por azar menos del 2.5 % de las veces (cola de Poisson). Si una tienda lo pasa, es poco probable que sea mala suerte. Se usa la ventana corta de la política porque el problema es de conducta: tiene que salir de vigilancia rápido si mejora |
+| **R3b — Tienda, monto** | Costo acumulado de la tienda en la ventana ≥ **USD 3 000** | **30 días** | Es el mismo tope que la política le da a Operaciones por caso (7.3.2): pasado ese monto en el mes, ya no es un caso aislado. Cubre a la tienda con pocas averías pero caras, que R3a no ve |
+
+**Por qué la tienda usa el promedio del país y no el propio:** con su propio historial, una tienda que siempre tuvo muchas averías nunca saltaría, y esa es justamente la que hay que mirar.
+
+### Cómo se calcula k para R3a
+
+k depende del promedio de casos por tienda en 30 días del país (λ). Power BI lo calcula (medida `[k sugerido recurrencia tienda]`) y Logística regional actualiza `Cfg_Parametros` **cada trimestre**:
+
+| λ promedio del país (casos/tienda/30 días) | k | Probabilidad por azar con k | Con k − 1 sería |
+|---|---|---|---|
+| 1.0 | 4 | 1.9 % | 8.0 % |
+| 1.5 | 5 | 1.9 % | 6.6 % |
+| 2.0 | **6** | 1.7 % | 5.3 % |
+| 3.0 | 8 | 1.2 % | 3.4 % |
+| 4.0 | 9 | 2.1 % | 5.1 % |
+| 5.0 | 11 | 1.4 % | 3.2 % |
+| 6.0 | 12 | 2.0 % | 4.3 % |
+
+El valor inicial es **k = 6** (λ ≈ 2, el supuesto del documento 03) hasta tener 2 meses de datos reales.
+
+**Carga esperada para CI por país:** con λ = 2, R3a marca entre el 2 % y el 5 % de las tiendas-mes, o sea 2 a 5 tiendas de 100. Las tiendas grandes y las mal manejadas suben esa cifra, así que hay que medirlo en el piloto. Si cada tienda en vigilancia genera ~6 casos al mes, eso son 15–30 casos de tienda al mes, más R1, R2 y R3b, para un total aproximado de 1–3 casos por día hábil por país. Es manejable dentro de las 48 h.
+
+### Modo de arranque
+
+`RecurrenciaModo = Observar` durante las **primeras 4 semanas del piloto**. El flujo calcula y marca la recurrencia, pero **no** cambia el aprobador. Con eso se ve cuántos casos habría recibido CI y se ajustan los umbrales sin colapsarlo. Después pasa a `Aplicar`. Ojo: la política exige el nivel 3 por recurrencia, así que el modo Observar solo se justifica dentro del piloto y debe quedar escrito así en el procedimiento.
+
+### Parámetros (`Cfg_Parametros`, por país con fallback `*`)
+
+`RecurrenciaModo`, `RecSKU_MinCasos` (3), `RecSKU_VentanaDias` (60), `RecProv_MinCasos` (5), `RecProv_VentanaDias` (60), `RecTienda_MinCasos` (6), `RecTienda_MontoUSD` (3000), `RecTienda_VentanaDias` (30). Las ventanas deben quedar entre 30 y 60 días para cumplir la política.
+
+### Costo en el flujo
+
+Son tres *Obtener elementos* por caso, filtrados por columnas indexadas (`SKU`, `Proveedor`, `UbicacionCodigo`, `FechaEnvio`). Agregan ~8–10 acciones por caso y no requieren un proceso nocturno. Hay que **indexar `Proveedor`** además de los índices del documento 01.
 
 ## Otras fuentes encontradas (no leídas a fondo)
 

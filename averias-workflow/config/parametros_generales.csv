@@ -1,8 +1,15 @@
 ﻿Clave,Valor,Descripcion
-VentanaFraccionamientoDias,7,Días hacia atrás para sumar averías del mismo SKU en la misma ubicación (anti-fraccionamiento)
 HorasRecordatorio,24,Horas sin respuesta antes de recordatorio por Teams al aprobador
 HorasEscalamientoSuplente,48,Horas sin respuesta antes de reasignar la aprobación al suplente
 SLAValorizacionHoras,24,Horas para que Control de Inventarios valorice con costo Infor
 SLAAjusteInforDias,3,Días desde aprobación final hasta registrar el número de ajuste Infor
 UmbralAcumuladoTiendaMesUSD,3000,Acumulado mensual por ubicación que dispara aviso al Gerente de logística país
 MaxDiasDeteccionAReporte,3,Días máximos entre detección y reporte; si se excede se marca ReporteTardio
+RecurrenciaModo,Observar,Observar = marca sin cambiar aprobador (solo piloto 4 semanas); Aplicar = recurrencia envía a nivel 3 (Control de Inventarios)
+RecSKU_MinCasos,3,R1: casos del mismo SKU + proveedor en el país para considerar recurrencia
+RecSKU_VentanaDias,60,R1: ventana en días (debe estar entre 30 y 60 por política)
+RecProv_MinCasos,5,R2: casos imputados a Proveedor local/importado del mismo proveedor
+RecProv_VentanaDias,60,R2: ventana en días (30-60)
+RecTienda_MinCasos,6,R3a: casos de la misma tienda; recalcular trimestral con la medida [k sugerido recurrencia tienda]
+RecTienda_MontoUSD,3000,R3b: costo acumulado de la misma tienda en la ventana (mismo tope por caso que la política da a Operaciones)
+RecTienda_VentanaDias,30,R3a/R3b: ventana en días (30-60)
