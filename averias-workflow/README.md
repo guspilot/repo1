@@ -15,6 +15,7 @@ El stack es SharePoint (listas `Averías` y `Averías_Lineas`), Power Apps para 
 | 4 | [`04_medidas_dax.md`](04_medidas_dax.md) | Modelo de Power BI, **todos los KPIs de la sección 9**, control del procedimiento y RLS |
 | 5 | [`05_flujo_power_automate.md`](05_flujo_power_automate.md) | Flujos AV-01 a AV-05 paso a paso y 20 casos de prueba |
 | 6 | [`06_power_apps.md`](06_power_apps.md) | App móvil: 8 pantallas, bandeja "Mis pendientes", fórmulas Power Fx delegables y pruebas |
+| 7 | [`07_plan_piloto_sv.md`](07_plan_piloto_sv.md) | Piloto El Salvador en 2 fases: calendario, tiendas, roles, capacitación y criterios de avance |
 | — | [`simulacion/`](simulacion) | Simulacro de la recurrencia ([`RESULTADOS.md`](simulacion/RESULTADOS.md)) y de la carga por aprobador (`carga_matriz.py`) |
 
 Los CSV están en UTF-8 con BOM, para que Excel muestre bien las tildes, y sirven para **Nueva lista → Desde CSV**.
@@ -38,7 +39,8 @@ Reporte (≤ 24 h) → valorización CI (costo y retail de Infor) → nivel seg�
 
 ## Prerrequisitos que hay que confirmar antes de construir
 
-- [ ] **Licencias M365 del personal de tienda, CD y ST.** Sin cuenta no pueden reportar ni diagnosticar en la app.
+- [x] **Licencias M365 del personal de tienda, CD y ST:** confirmadas.
+- [x] **País piloto:** El Salvador (ver 07).
 - [ ] **Power BI Pro** para quien publica el tablero y para quienes lo consumen.
 - [ ] **Sitio de SharePoint** del que Logística regional sea propietaria, con la biblioteca `BI_Externos`.
 - [ ] **El país 6** (`P6`): código, moneda y zona horaria.
@@ -53,6 +55,6 @@ Reporte (≤ 24 h) → valorización CI (costo y retail de Infor) → nivel seg�
 1. Crear el sitio, las listas de soporte desde los CSV y las listas `Averías` y `Averías_Lineas`, con los nombres internos primero y los índices antes de cargar datos.
 2. Construir AV-01 a AV-04 en una lista de prueba y correr los 20 casos de prueba del documento 05.
 3. Construir la app según [`06_power_apps.md`](06_power_apps.md) y correr sus pruebas.
-4. Hacer el piloto en un país (1 CD + 10 tiendas) durante 4 semanas, con `RecurrenciaModo = Observar`, AV-05 y el tablero.
-5. Correr el simulacro con los datos reales del piloto, pasar a `Aplicar` y hacer el despliegue regional.
+4. Piloto en El Salvador según [`07_plan_piloto_sv.md`](07_plan_piloto_sv.md): Fase 1 (CD + 10 tiendas) y Fase 2 (todas las tiendas SV), con `RecurrenciaModo = Observar`.
+5. Correr el simulacro con los datos reales, pasar a `Aplicar` y decidir el despliegue regional.
 6. Recalibrar al mes 3: λ del país, `FactorTamano` y las señales del documento 03 §4.
