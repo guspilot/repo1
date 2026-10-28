@@ -14,6 +14,7 @@ El stack es SharePoint (listas `Averías` y `Averías_Lineas`), Power Apps para 
 | 3 | [`03_reglas_aprobacion.md`](03_reglas_aprobacion.md) + [`config/`](config) | Matriz 7.3 aplicada, autorización de la disposición, SLA, escenarios de carga por aprobador y parámetros |
 | 4 | [`04_medidas_dax.md`](04_medidas_dax.md) | Modelo de Power BI, **todos los KPIs de la sección 9**, control del procedimiento y RLS |
 | 5 | [`05_flujo_power_automate.md`](05_flujo_power_automate.md) | Flujos AV-01 a AV-05 paso a paso y 20 casos de prueba |
+| 6 | [`06_power_apps.md`](06_power_apps.md) | App móvil: 8 pantallas, bandeja "Mis pendientes", fórmulas Power Fx delegables y pruebas |
 | — | [`simulacion/`](simulacion) | Simulacro de la recurrencia ([`RESULTADOS.md`](simulacion/RESULTADOS.md)) y de la carga por aprobador (`carga_matriz.py`) |
 
 Los CSV están en UTF-8 con BOM, para que Excel muestre bien las tildes, y sirven para **Nueva lista → Desde CSV**.
@@ -51,7 +52,7 @@ Reporte (≤ 24 h) → valorización CI (costo y retail de Infor) → nivel seg�
 
 1. Crear el sitio, las listas de soporte desde los CSV y las listas `Averías` y `Averías_Lineas`, con los nombres internos primero y los índices antes de cargar datos.
 2. Construir AV-01 a AV-04 en una lista de prueba y correr los 20 casos de prueba del documento 05.
-3. Construir la app con estas pantallas: Reportar, Mis averías, Valorizar (CI), Aprobar, Diagnóstico (ST), Disposición, Autorizar descuento (Gerente de Producto) y Cerrar (CI). La app no forma parte de este paquete.
+3. Construir la app según [`06_power_apps.md`](06_power_apps.md) y correr sus pruebas.
 4. Hacer el piloto en un país (1 CD + 10 tiendas) durante 4 semanas, con `RecurrenciaModo = Observar`, AV-05 y el tablero.
 5. Correr el simulacro con los datos reales del piloto, pasar a `Aplicar` y hacer el despliegue regional.
 6. Recalibrar al mes 3: λ del país, `FactorTamano` y las señales del documento 03 §4.

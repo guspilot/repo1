@@ -51,6 +51,7 @@ Son cinco flujos de nube. Todos usan **conectores estándar** (SharePoint, Appro
   No se usa `coalesce(body(...))` porque referenciar una acción omitida hace fallar el flujo.
 - **Rechazo o devolución sin comentario:** no se acepta. Se vuelve a crear la aprobación con el aviso "Rechazar o devolver requiere comentario", porque Approvals no permite exigir el comentario.
 - **Zona horaria:** las fechas se guardan en UTC. Para el folio y el período de tipo de cambio se usa `convertFromUtc(utcNow(), 'Central America Standard Time', ...)`.
+- **Asignación (bandeja de la app):** cada vez que un flujo deja el caso en un estado pendiente, en el mismo *Actualizar elemento* escribe `AsignadoAEmail`, `AsignadoRol` y `AsignadoDesde = utcNow()`. En el escalamiento al suplente se reescriben con el suplente. En los estados finales (Cerrado, Rechazado, Anulado) se vacían. La tabla de qué rol corresponde a cada estado está en [`06`](06_power_apps.md).
 - **Enlace a la app:** `https://apps.powerapps.com/play/<AppId>?id=<ID>`.
 
 ### Límites de solicitudes

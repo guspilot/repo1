@@ -105,6 +105,9 @@ Las fotos y videos van en el encabezado: una foto muestra varias unidades y no s
 | `FechaAprobacion` | Fecha de aprobación o rechazo | Fecha y hora | No | Flujo | |
 | `VersionMatriz` | Versión de matriz | Una línea de texto | No | Flujo | Se congela al enrutar. |
 | `MotivoRechazo` | Motivo de rechazo o devolución | Varias líneas de texto | No | Flujo | |
+| `AsignadoAEmail` | Asignado a | Una línea de texto | No | Flujo | A quién le toca el paso pendiente. Alimenta la bandeja "Mis pendientes" de la app (ver 06). **Indexado.** |
+| `AsignadoRol` | Rol asignado | Una línea de texto | No | Flujo | |
+| `AsignadoDesde` | Asignado desde | Fecha y hora | No | Flujo | Para la antigüedad y el semáforo de SLA en la app. |
 | `Comentarios` | Bitácora del ticket | Varias líneas de texto, con **anexar cambios** activado | No | Flujo / App | [8.2.5] **Toda** comunicación del caso va acá: nada por correo ni por chat. |
 
 ### E. Diagnóstico y disposición
@@ -217,7 +220,7 @@ Hay que crearlos **antes** de llegar a 5 000 ítems.
 
 | Lista | Columnas indexadas |
 |---|---|
-| `Averias` | `PaisCodigo`, `Estado`, `UbicacionCodigo`, `FechaEnvio`, `Title`, `NumeroAjusteInfor`, `Created` |
+| `Averias` | `PaisCodigo`, `Estado`, `UbicacionCodigo`, `FechaEnvio`, `Title`, `NumeroAjusteInfor`, `AsignadoAEmail`, `ReportanteEmail`, `Created` |
 | `Averias_Lineas` | `AveriaID`, `PaisCodigo`, `SKU`, `Proveedor`, `FechaEnvio` |
 
 ---
@@ -238,7 +241,7 @@ Se crean con **Nueva lista → Desde CSV** y después se ajustan los tipos: Shar
 | `Cfg_TipoCambio` | `config/tipo_cambio.csv` | `Title`=Periodo (AAAA-MM); Moneda; UnidadesPorUSD; Fuente; Activo | Finanzas país, mensual |
 | `Cfg_TablaPoisson` | `config/tabla_poisson.csv` | `Title`=LambdaHasta (número); K_alfa_2_5; K_alfa_1_0 | Fija |
 | `Cfg_AccesoBI` | `config/acceso_bi_plantilla.csv` | Email; PaisCodigo (`*` = todos) | Logística regional |
-| `Averias_Historial` | (vacía) | `Title`=Folio; AveriaID (indexado); Accion (elección: Enviado, Valorizado, Aprobado, Rechazado, Devuelto, Diagnóstico ST, Disposición propuesta, Disposición autorizada, Disposición rechazada, Recordatorio, Escalado a suplente, Cerrado, Anulado); Rol; Actor (Persona); FechaInicio y FechaFin; DuracionHoras; SLAHoras; Comentario | Solo la escriben los flujos |
+| `Averias_Historial` | (vacía) | `Title`=Folio; AveriaID (indexado); Accion (elección: Enviado, Comentario, Valorizado, Aprobado, Rechazado, Devuelto, Diagnóstico ST, Disposición propuesta, Disposición autorizada, Disposición rechazada, Recordatorio, Escalado a suplente, Cerrado, Anulado); Rol; Actor (Persona); FechaInicio y FechaFin; DuracionHoras; SLAHoras; Comentario | Solo la escriben los flujos |
 
 **Columnas Persona en `Cfg_Aprobadores`:** al importar desde CSV, los correos quedan como texto. Creá a mano `Aprobador` y `Suplente` como columnas Persona y pegá los correos en la vista de cuadrícula.
 
