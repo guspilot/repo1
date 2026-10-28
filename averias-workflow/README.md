@@ -8,6 +8,7 @@ El stack es SharePoint (lista `Averías`), Power Apps para la captura móvil, Po
 
 | # | Archivo | Contenido |
 |---|---|---|
+| 0 | [`00_contexto_politica.md`](00_contexto_politica.md) | **Política POL-CO-0031 v2.0**: reglas obligatorias, brechas del diseño actual y decisiones abiertas (D1–D8). **Leer primero: los documentos 01–05 todavía no están alineados con la política.** |
 | 1 | [`01_esquema_lista.md`](01_esquema_lista.md) | Columnas, tipos, validaciones, índices, máquina de estados y listas de soporte |
 | 2 | [`catalogos/`](catalogos) | `tipo_averia.csv`, `causa.csv`, `ubicacion.csv` |
 | 3 | [`03_reglas_aprobacion.md`](03_reglas_aprobacion.md) + [`config/`](config) | Umbrales por costo, escenarios A/B/C, SLA, anti-fraccionamiento, segregación y parámetros editables |
